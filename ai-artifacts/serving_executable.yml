@@ -17,7 +17,7 @@ spec:
       predictor:
         containers:
           - name: kserve-container
-            image: docker.io/rahulcruze786/ML_Project_TransacAnalyzer:0.0.1
+            image: docker.io/rahulcruze786/ml_project_transac-analyzer:0.0.1
             ports:
               - containerPort: 9003
                 protocol: TCP
