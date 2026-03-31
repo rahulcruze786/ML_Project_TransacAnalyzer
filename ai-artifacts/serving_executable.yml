@@ -5,15 +5,18 @@ metadata:
   labels:
     scenarios.ai.sap.com/id: "ml-classification-scenario"
     executables.ai.sap.com/id: "ml-classification-serving"
+    ai.sap.com/version: "1.0.0"
+  annotations:
+    executables.ai.sap.com/name: "multinomialnb-model"
 spec:
   template:
     apiVersion: serving.kserve.io/v1beta1
     metadata:
-      annotations:  |
+      annotations: |
         autoscaling.knative.dev/metric: concurrency
         autoscaling.knative.dev/target: "1"
         autoscaling.knative.dev/targetBurstCapacity: "0"
-    spec:  |
+    spec: |
       predictor:
         containers:
           - name: kserve-container
