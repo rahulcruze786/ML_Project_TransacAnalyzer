@@ -1,0 +1,26 @@
+apiVersion: ai.sap.com/v1alpha1
+kind: ServingTemplate
+metadata:
+  name: multinomialNB-model
+  labels:
+    scenarios.ai.sap.com/id: "ml-classification-scenario"
+    executables.ai.sap.com/id: "ml-classification-serving"
+spec:
+  template:
+    apiVersion: serving.kserve.io/v1beta1
+    metadata:
+      annotations:
+        autoscaling.knative.dev/metric: concurrency
+        autoscaling.knative.dev/target: "1"
+        autoscaling.knative.dev/targetBurstCapacity: "0"
+    spec:
+      predictor:
+        containers:
+          - name: kserve-container
+            image: docker.io/rahulcruze786/ML_Project_TransacAnalyzer:0.0.1
+            ports:
+              - containerPort: 9003
+                protocol: TCP
+            env:
+              - name: STORAGE_URI
+                value: "nonexistent"
