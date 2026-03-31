@@ -1,7 +1,7 @@
 apiVersion: ai.sap.com/v1alpha1
 kind: ServingTemplate
 metadata:
-  name: multinomialNB-model
+  name: multinomialnb-model
   labels:
     scenarios.ai.sap.com/id: "ml-classification-scenario"
     executables.ai.sap.com/id: "ml-classification-serving"
