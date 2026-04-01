@@ -25,6 +25,3 @@ spec:
             ports:
               - containerPort: 9003
                 protocol: TCP
-            #env:
-            #  - name: STORAGE_URI
-            #    value: "nonexistent"
