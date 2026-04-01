@@ -16,7 +16,6 @@ spec:
         autoscaling.knative.dev/metric: concurrency
         autoscaling.knative.dev/target: "1"
         autoscaling.knative.dev/targetBurstCapacity: "0"
-        serving.kserve.io/deploymentMode: RawDeployment
     spec: |
       predictor:
         containers:
