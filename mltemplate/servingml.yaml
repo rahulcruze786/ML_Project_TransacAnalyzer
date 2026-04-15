@@ -1,0 +1,46 @@
+apiVersion: ai.sap.com/v1alpha1
+kind: ServingTemplate
+metadata:
+  name: naive-bayes-prediction
+  annotations:
+    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline"
+    scenarios.ai.sap.com/name: "naive-bayes"
+    executables.ai.sap.com/description: "naive-bayes prediction"
+    executables.ai.sap.com/name: "naive-bayes-prediction"
+  labels:
+    scenarios.ai.sap.com/id: "naive-bayes"
+    ai.sap.com/version: "1.0.1"
+spec:
+  inputs:
+    artifacts:
+      - name: multinomialNB
+  template:
+    apiVersion: "serving.kserve.io/v1beta1"
+    metadata:
+      annotations: "{}"
+      labels: "{\"ai.sap.com/resourcePlan\": \"starter\"}"
+    spec: |
+      predictor:
+        minReplicas: 1
+        maxReplicas: 2
+        containers:
+          - name: kserve-container
+            image: docker.io/rahulcruze786/ml_prediction:v1.6
+            ports:
+              - containerPort: 8080
+                protocol: TCP
+            command: ["python"]
+            args:
+              - "prediction/app.py"
+            env:
+              - name: STORAGE_URI
+                value: "{{inputs.artifacts.multinomialNB}}"
+              - name: MODEL_PATH
+                value: "/mnt/models"
+            resources:
+              requests:
+                cpu: "0.5"
+                memory: "512Mi"
+              limits:
+                cpu: "1"
+                memory: "1Gi"
