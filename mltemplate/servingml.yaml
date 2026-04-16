@@ -29,7 +29,9 @@ spec:
             ports:
               - containerPort: 8080
                 protocol: TCP
-            command: ["python"]
+
+            workingDir: /app
+            command: ["python","/app/app.py"]
             args:
               - "prediction/app.py"
             env:
