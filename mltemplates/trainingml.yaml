@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: naive-bayes-training
+  name: naive-bayes-training-v
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes training Pipeline"
-    scenarios.ai.sap.com/name: "naive-bayes"
-    executables.ai.sap.com/description: "naive-bayes model"
-    executables.ai.sap.com/name: "naive-bayes-training"
+    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-v"
+    scenarios.ai.sap.com/name: "naive-bayes-v"
+    executables.ai.sap.com/description: "naive-bayes model-v"
+    executables.ai.sap.com/name: "naive-bayes-training-v"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes"
+    scenarios.ai.sap.com/id: "naive-bayes-v"
     ai.sap.com/version: "1.0.0"
 spec:
   entrypoint: training-pipeline
