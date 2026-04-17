@@ -23,7 +23,7 @@ spec:
         labels:
           ai.sap.com/resourcePlan: starter
       container:
-        image: docker.io/rahulcruze786/ml_training_model:v1.6
+        image: docker.io/rahulcruze786/ml_training_model:v1.7
         command: ["python"]
         args:
           - "trainer.py"
@@ -35,5 +35,10 @@ spec:
           - name: model-output
             globalName: multinomialNB
             path: /tmp/models          # ← only output models here
+            archive:
+              none: {}
+          - name: metrics-json
+            globalName: multinomialNB-metrics
+            path: /tmp/models/metrics.json
             archive:
               none: {}
