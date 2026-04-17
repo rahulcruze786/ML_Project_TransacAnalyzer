@@ -37,8 +37,3 @@ spec:
             path: /tmp/models          # ← only output models here
             archive:
               none: {}
-          - name: metrics-json
-            globalName: multinomialNB-metrics
-            path: /tmp/models/metrics.json
-            archive:
-              none: {}
