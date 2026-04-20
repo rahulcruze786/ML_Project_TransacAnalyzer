@@ -1,29 +1,25 @@
 Deployment Logs
-
-
-Timestamp
-Message
-today 12:08:17 PM	
-Traceback (most recent call last):
-today 12:08:17 PM	
-File "/app/scripts/initializer-entrypoint", line 15, in <module>
-today 12:08:17 PM	
-kserve.Storage.download(src_uri, dest_path)
-today 12:08:17 PM	
-Storage._download_s3(uri, out_dir)
-today 12:08:17 PM	
-raise RuntimeError(
-today 12:08:17 PM	
-RuntimeError: Failed to fetch model. No model found in ai/default/e50ce5d4a063a7f6/multinomialNB.
-today 12:08:17 PM	
-File "/app/src/storage.py", line 97, in download
-today 12:08:17 PM	
-File "/app/src/storage.py", line 195, in _download_s3
-today 12:08:17 PM	
+today 12:20:09 PM	
+python: can't open file '/app/prediction/app.py': [Errno 2] No such file or directory
+today 12:19:15 PM	
+python: can't open file '/app/prediction/app.py': [Errno 2] No such file or directory
+today 12:18:45 PM	
+python: can't open file '/app/prediction/app.py': [Errno 2] No such file or directory
+today 12:18:30 PM	
+python: can't open file '/app/prediction/app.py': [Errno 2] No such file or directory
+today 12:18:26 PM	
+python: can't open file '/app/prediction/app.py': [Errno 2] No such file or directory
+today 12:18:13 PM	
+INFO:root:Successfully copied s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/eee6bb5187a0644c/multinomialNB to /mnt/models
+today 12:18:13 PM	
+INFO:root:Model downloaded in 1.165741343000036 seconds.
+today 12:18:12 PM	
 INFO:botocore.configprovider:Found endpoint for s3 via: environment_global.
-today 12:08:17 PM	
+today 12:18:12 PM	
 INFO:botocore.credentials:Found credentials in environment variables.
-today 12:08:17 PM	
-INFO:root:Initializing, args: src_uri [s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e50ce5d4a063a7f6/multinomialNB] dest_path[ [/mnt/models]
-today 12:08:17 PM	
-INFO:root:Copying contents of s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e50ce5d4a063a7f6/multinomialNB to local
+today 12:18:12 PM	
+INFO:root:Initializing, args: src_uri [s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/eee6bb5187a0644c/multinomialNB] dest_path[ [/mnt/models]
+today 12:18:12 PM	
+INFO:root:Copying contents of s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/eee6bb5187a0644c/multinomialNB to local
+today 12:18:12 PM	
+/usr/local/lib/python3.12/site-packages/google/cloud/storage/_http.py:19: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
