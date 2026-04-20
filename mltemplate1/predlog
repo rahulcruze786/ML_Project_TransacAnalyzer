@@ -1,0 +1,29 @@
+Deployment Logs
+
+
+Timestamp
+Message
+today 12:08:17 PM	
+Traceback (most recent call last):
+today 12:08:17 PM	
+File "/app/scripts/initializer-entrypoint", line 15, in <module>
+today 12:08:17 PM	
+kserve.Storage.download(src_uri, dest_path)
+today 12:08:17 PM	
+Storage._download_s3(uri, out_dir)
+today 12:08:17 PM	
+raise RuntimeError(
+today 12:08:17 PM	
+RuntimeError: Failed to fetch model. No model found in ai/default/e50ce5d4a063a7f6/multinomialNB.
+today 12:08:17 PM	
+File "/app/src/storage.py", line 97, in download
+today 12:08:17 PM	
+File "/app/src/storage.py", line 195, in _download_s3
+today 12:08:17 PM	
+INFO:botocore.configprovider:Found endpoint for s3 via: environment_global.
+today 12:08:17 PM	
+INFO:botocore.credentials:Found credentials in environment variables.
+today 12:08:17 PM	
+INFO:root:Initializing, args: src_uri [s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e50ce5d4a063a7f6/multinomialNB] dest_path[ [/mnt/models]
+today 12:08:17 PM	
+INFO:root:Copying contents of s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e50ce5d4a063a7f6/multinomialNB to local
