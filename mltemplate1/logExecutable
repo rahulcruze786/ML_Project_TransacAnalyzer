@@ -1,0 +1,38 @@
+	
+Error: exit status 1
+today 4:11:59 PM	
+time="2026-04-20T10:41:59.620Z" level=info msg="sub-process exited" argo=true error="<nil>"
+today 4:11:59 PM	
+time="2026-04-20T10:41:59.620Z" level=warning msg="cannot save artifact /tmp/models" argo=true error="stat /tmp/models: no such file or directory"
+today 4:11:58 PM	
+File "/app/trainer.py", line 390, in <module>
+today 4:11:58 PM	
+SAP AI Core tracking initialized.
+today 4:11:58 PM	
+Warning: 1 rows had no matching ExpenseType and will be skipped. Unmatched GLAccounts: ['0000273001'] Need to update the account mapping table
+today 4:11:58 PM	
+train_models(df,text_column=text_column,target_column=target_column,allowed_class = allowed_class,df_category_mapping=df_category_mapping,
+today 4:11:58 PM	
+File "/app/trainer.py", line 115, in train_models
+today 4:11:58 PM	
+MetricTag(name="text_column", value=str(text_column)),
+today 4:11:58 PM	
+^^^^^^^^^
+today 4:11:58 PM	
+NameError: name 'MetricTag' is not defined. Did you mean: 'Metric'?
+today 4:11:58 PM	
+Traceback (most recent call last):
+today 4:11:57 PM	
+/app/shared/hdi_data.py:36: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+today 4:11:57 PM	
+df = pd.read_sql(query, conn)
+today 4:11:40 PM	
+time="2026-04-20T10:41:40.101Z" level=info msg="Start loading input artifacts..."
+today 4:11:40 PM	
+time="2026-04-20T10:41:40.101Z" level=info msg="Alloc=8356 TotalAlloc=15829 Sys=22614 NumGC=4 Goroutines=3"
+today 4:11:39 PM	
+time="2026-04-20T10:41:39.979Z" level=info msg="Executor initialized" deadline="0001-01-01 00:00:00 +0000 UTC" includeScriptOutput=false namespace=rg-aad075e8-cd927cab podName=edad3ba5e37f1372-train-step-2116629492 templateName=train-step version="&Version{Version:v3.7.4+9b9649b.dirty,BuildDate:2026-01-22T14:11:36Z,GitCommit:9b9649b0af3d5006f3b6688cb2881db4fb324a96,GitTag:v3.7.4,GitTreeState:dirty,GoVersion:go1.25.5,Compiler:gc,Platform:linux/amd64,}"
+today 4:11:39 PM	
+time="2026-04-20T10:41:39.979Z" level=info msg="Using executor retry strategy" Duration=1s Factor=1.6 Jitter=0.5 Steps=5
+today 4:11:39 PM	
+time="2026-04-20T10:41:39.975Z" level=info msg="Starting Workflow Executor" version=v3.7.4+9b9649b.dirty
