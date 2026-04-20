@@ -30,8 +30,8 @@ spec:
               - containerPort: 8080
                 protocol: TCP
             command: ["python"]
-            #args:
-              #- "prediction/app.py"
+            args:
+              - "prediction/app.py"
             env:
               - name: STORAGE_URI
                 value: "{{inputs.artifacts.multinomialNB}}"
