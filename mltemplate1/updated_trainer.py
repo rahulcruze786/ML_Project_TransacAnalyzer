@@ -1,3 +1,5 @@
+from ai_core_sdk.models import Metric, MetricLabel, MetricCustomInfo
+
 # REMOVE THIS ENTIRE BLOCK
 if tracking_enabled:
     tracker.log_metrics(
