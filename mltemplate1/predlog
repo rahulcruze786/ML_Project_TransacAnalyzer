@@ -1,2 +1,101 @@
-	
-admission webhook "servingtemplatevalidator.ai.sap.com" denied the request: v1alpha1.ai.sap.com "naive-bayes-prediction-v3" is invalid: [spec.inputs.artifacts[0]: Invalid value: "multinomialNB-HongKong": [multinomialNB-HongKong] is not in correct format. Accepted format is [^[a-zA-Z0-9\_]+$], spec.inputs.artifacts[1]: Invalid value: "multinomialNB-Singapore": [multinomialNB-Singapore] is not in correct format. Accepted format is [^[a-zA-Z0-9\_]+$], spec.inputs.artifacts[2]: Invalid value: "multinomialNB-Malaysia": [multinomialNB-Malaysia] is not in correct format. Accepted format is [^[a-zA-Z0-9\_]+$]]
+Deployment Logs
+
+
+Timestamp
+Message
+today 2:28:34 AM	
+ALL_METADATA = load_metadata()
+today 2:28:34 AM	
+File "/app/app.py", line 52, in load_metadata
+today 2:28:34 AM	
+raise FileNotFoundError(f"MODEL_DIR not found: {MODEL_DIR}")
+today 2:28:34 AM	
+^^^^^^^^^^^^^^^
+today 2:28:34 AM	
+FileNotFoundError: MODEL_DIR not found: /mnt/models
+today 2:28:34 AM	
+🚀 Loading all market models at startup...
+today 2:28:34 AM	
+Traceback (most recent call last):
+today 2:28:34 AM	
+File "/app/app.py", line 98, in <module>
+today 2:27:38 AM	
+^^^^^^^^^^^^^^^
+today 2:27:38 AM	
+File "/app/app.py", line 52, in load_metadata
+today 2:27:38 AM	
+FileNotFoundError: MODEL_DIR not found: /mnt/models
+today 2:27:38 AM	
+ALL_METADATA = load_metadata()
+today 2:27:38 AM	
+raise FileNotFoundError(f"MODEL_DIR not found: {MODEL_DIR}")
+today 2:27:38 AM	
+Traceback (most recent call last):
+today 2:27:38 AM	
+File "/app/app.py", line 98, in <module>
+today 2:27:38 AM	
+🚀 Loading all market models at startup...
+today 2:27:04 AM	
+File "/app/app.py", line 52, in load_metadata
+today 2:27:04 AM	
+raise FileNotFoundError(f"MODEL_DIR not found: {MODEL_DIR}")
+today 2:27:04 AM	
+FileNotFoundError: MODEL_DIR not found: /mnt/models
+today 2:27:04 AM	
+^^^^^^^^^^^^^^^
+today 2:27:04 AM	
+^^^^^^^^^^^^^^^
+today 2:27:04 AM	
+File "/app/app.py", line 52, in load_metadata
+today 2:27:04 AM	
+raise FileNotFoundError(f"MODEL_DIR not found: {MODEL_DIR}")
+today 2:27:04 AM	
+FileNotFoundError: MODEL_DIR not found: /mnt/models
+today 2:27:04 AM	
+File "/app/app.py", line 98, in <module>
+today 2:27:04 AM	
+Traceback (most recent call last):
+today 2:27:04 AM	
+🚀 Loading all market models at startup...
+today 2:27:04 AM	
+ALL_METADATA = load_metadata()
+today 2:26:48 AM	
+FileNotFoundError: MODEL_DIR not found: /mnt/models
+today 2:26:48 AM	
+raise FileNotFoundError(f"MODEL_DIR not found: {MODEL_DIR}")
+today 2:26:48 AM	
+Traceback (most recent call last):
+today 2:26:48 AM	
+File "/app/app.py", line 98, in <module>
+today 2:26:48 AM	
+File "/app/app.py", line 52, in load_metadata
+today 2:26:48 AM	
+🚀 Loading all market models at startup...
+today 2:26:48 AM	
+ALL_METADATA = load_metadata()
+today 2:26:48 AM	
+^^^^^^^^^^^^^^^
+today 2:26:42 AM	
+File "/app/app.py", line 98, in <module>
+today 2:26:42 AM	
+^^^^^^^^^^^^^^^
+today 2:26:42 AM	
+File "/app/app.py", line 52, in load_metadata
+today 2:26:42 AM	
+Traceback (most recent call last):
+today 2:26:42 AM	
+File "/app/app.py", line 98, in <module>
+today 2:26:42 AM	
+^^^^^^^^^^^^^^^
+today 2:26:42 AM	
+File "/app/app.py", line 52, in load_metadata
+today 2:26:42 AM	
+Traceback (most recent call last):
+today 2:26:42 AM	
+🚀 Loading all market models at startup...
+today 2:26:42 AM	
+ALL_METADATA = load_metadata()
+today 2:26:42 AM	
+raise FileNotFoundError(f"MODEL_DIR not found: {MODEL_DIR}")
+today 2:26:42 AM	
+FileNotFoundError: MODEL_DIR not found: /mnt/models
