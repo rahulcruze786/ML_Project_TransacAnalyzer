@@ -1,2 +1,19 @@
-KEY_GROUP : P/L-PRO NO LONG REQ-OP.LOSS IN
-KEY_GROUP : P/L-PRO NO LONG REQ-OP.LOSS IN
+Warning: 1 rows had no matching ExpenseType and will be skipped. Unmatched GLAccounts: ['0000273001'] Need to update the account mapping table
+ENV MODEL_DIR = /tmp/models
+Amt w-off w/o Pro-Op Loss Ext | Test F1: 0.497 | Test Accuracy: 0.989
+ECL Allowances - Stage 1 to 3 | Single class only.
+Frauds, Shortages & Losses | Single class only.
+Operational Losses (Ext & Int) | Single class only.
+Other Costs | Test F1: 0.500 | Test Accuracy: 1.000
+P/L-New Prov Creat-Op.Loss Int | Test F1: 0.763 | Test Accuracy: 0.917
+P/L-Pro no long req-Op.Loss Ex | Single class only.
+P/L-Pro no long req-Op.Loss In | Single class only.
+P/L-Pro no long req-Op.Loss In --> Skipped: empty vocabulary after preprocessing.
+Provision Utilised - External | Single class only.
+Prov-Op Losses & Other Liabs | Single class only.
+Prov-Op Losses & Other Liabs-Ext | Test F1: 1.000 | Test Accuracy: 1.000
+Prov-Op Losses & Other Liabs-Int | Test F1: 1.000 | Test Accuracy: 1.000
+Rec amt prev w/off-Op.Loss Ext | Single class only.
+Rec amt prev w/off-Op.Loss Int | Test F1: 1.000 | Test Accuracy: 1.000
+Rec amt prev w/off-OpLoss GSSC | Single class only.
+Sundry Accruals & Deferred Inc | Test F1: 0.500 | Test Accuracy: 0.999
