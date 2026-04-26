@@ -30,6 +30,8 @@ spec:
         env:
           - name: MODEL_DIR
             value: "/tmp/models"
+          - name: MARKET
+            value: "{{workflow.parameters.market}}"
       outputs:
         artifacts:
           - name: model-output
@@ -37,3 +39,8 @@ spec:
             path: /tmp/models          # ← only output models here
             archive:
               none: {}
+
+  arguments:
+    parameters:
+      - name: market
+        value: "Hong Kong"          # default — overridden per execution
