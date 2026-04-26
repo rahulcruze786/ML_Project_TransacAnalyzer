@@ -1,39 +1,63 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: naive-bayes-training
+  name: naive-bayes-training-v4
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes training Pipeline"
-    scenarios.ai.sap.com/name: "naive-bayes"
-    executables.ai.sap.com/description: "naive-bayes model"
-    executables.ai.sap.com/name: "naive-bayes-training"
+    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-v4 multi-market"
+    scenarios.ai.sap.com/name: "naive-bayes-v4"
+    executables.ai.sap.com/description: "naive-bayes model-v4"
+    executables.ai.sap.com/name: "naive-bayes-training-v4"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes"
+    scenarios.ai.sap.com/id: "naive-bayes-v4"
     ai.sap.com/version: "1.0.0"
 spec:
   entrypoint: training-pipeline
   templates:
+
     - name: training-pipeline
       steps:
-        - - name: train
+        - - name: train-hongkong
             template: train-step
+            arguments:
+              parameters:
+                - name: market
+                  value: "Hong Kong"
+
+          - name: train-singapore
+            template: train-step
+            arguments:
+              parameters:
+                - name: market
+                  value: "Singapore"
+
+          - name: train-malaysia
+            template: train-step
+            arguments:
+              parameters:
+                - name: market
+                  value: "Malaysia"
 
     - name: train-step
+      inputs:
+        parameters:
+          - name: market
       metadata:
         labels:
           ai.sap.com/resourcePlan: starter
       container:
-        image: docker.io/rahulcruze786/ml_training_model:v1.6
+        image: docker.io/rahulcruze786/ml_training_model:v1.9
         command: ["python"]
         args:
-          - "trainer.py"
+          - "metrics.py"
         env:
           - name: MODEL_DIR
             value: "/tmp/models"
+          - name: MARKET
+            value: "{{inputs.parameters.market}}"
       outputs:
         artifacts:
           - name: model-output
-            globalName: multinomialNB
+            globalName: "NBmodels-{{inputs.parameters.market}}"
             path: /tmp/models
             archive:
               none: {}
