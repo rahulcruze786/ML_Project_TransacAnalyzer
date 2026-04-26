@@ -35,7 +35,7 @@ spec:
       outputs:
         artifacts:
           - name: model-output
-            globalName: NBmodels
+            globalName: "{{workflow.parameters.artifactName}}"
             path: /tmp/models          # ← only output models here
             archive:
               none: {}
@@ -43,4 +43,6 @@ spec:
   arguments:
     parameters:
       - name: market
-        value: "Hong Kong"          # default — overridden per execution
+        value: "Hong Kong" 
+      - name: artifactName
+        value: "multinomialNB-HongKong"
