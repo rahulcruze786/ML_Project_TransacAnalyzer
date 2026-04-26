@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: naive-bayes-training-v
+  annotations:
+    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-v"
+    scenarios.ai.sap.com/name: "naive-bayes-v"
+    executables.ai.sap.com/description: "naive-bayes model-v"
+    executables.ai.sap.com/name: "naive-bayes-training-v"
+  labels:
+    scenarios.ai.sap.com/id: "naive-bayes-v"
+    ai.sap.com/version: "1.0.0"
+spec:
+  entrypoint: training-pipeline
+  templates:
+    - name: training-pipeline
+      steps:
+        - - name: train
+            template: train-step
+
+    - name: train-step
+      metadata:
+        labels:
+          ai.sap.com/resourcePlan: starter
+      container:
+        image: docker.io/rahulcruze786/ml_training_model:v1.7
+        command: ["python"]
+        args:
+          - "trainer.py"
+        env:
+          - name: MODEL_DIR
+            value: "/tmp/models"
+      outputs:
+        artifacts:
+          - name: model-output
+            globalName: multinomialNB
+            path: /tmp/models          # ← only output models here
+            archive:
+              none: {}
