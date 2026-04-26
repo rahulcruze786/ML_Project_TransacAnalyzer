@@ -13,9 +13,9 @@ metadata:
 spec:
   inputs:
     artifacts:
-      - name: multinomialNB-HongKong
-      - name: multinomialNB-Singapore
-      - name: multinomialNB-Malaysia
+      - name: multinomialNB_HongKong
+      - name: multinomialNB_Singapore
+      - name: multinomialNB_Malaysia
   template:
     apiVersion: "serving.kserve.io/v1beta1"
     metadata:
@@ -34,11 +34,11 @@ spec:
             command: ["python", "app.py"]
             env:
               - name: STORAGE_URI_HONGKONG
-                value: "{{inputs.artifacts.multinomialNB-HongKong}}"
+                value: "{{inputs.artifacts.multinomialNB_HongKong}}"
               - name: STORAGE_URI_SINGAPORE
-                value: "{{inputs.artifacts.multinomialNB-Singapore}}"
+                value: "{{inputs.artifacts.multinomialNB_Singapore}}"
               - name: STORAGE_URI_MALAYSIA
-                value: "{{inputs.artifacts.multinomialNB-Malaysia}}"
+                value: "{{inputs.artifacts.multinomialNB_Malaysia}}"
               - name: MODEL_PATH
                 value: "/mnt/models"
             resources:
