@@ -128,16 +128,25 @@ def train_models(df, text_column, target_column, allowed_class, df_category_mapp
     # ── Training loop ─────────────────────────────────────────────────────────
     for key, group in df.groupby("key"):
         texts = group[text_column].fillna("").astype(str)
+        X     = texts
+        y     = group[target_column]
 
-        # Skip: all text empty
-        if texts.str.strip().eq("").all():
+        # ── Gate 1: check preprocessed vocabulary is non-empty ────────────────
+        # Run the same cleaning that TfidfVectorizer will see. If nothing survives
+        # stop here with one clear message — no ambiguous try/except around fit().
+        cleaned = preprocess_transform(X.tolist(), seasonal_words)
+        if not any(t.strip() for t in cleaned):
+            print(f"{key} --> Skipped: empty vocabulary after preprocessing.")
+            skipped_groups.append(str(key))
+            key_results[str(key)] = {"type": "skipped_vocab"}
+            continue
+
+        # ── Gate 2: check raw text is not entirely blank ──────────────────────
+        if X.str.strip().eq("").all():
             print(f"{key} --> Skipped: all text empty.")
             skipped_groups.append(str(key))
             key_results[str(key)] = {"type": "skipped_empty_text"}
             continue
-
-        X = texts
-        y = group[target_column]
 
         num_classes     = y.nunique()
         min_class_count = y.value_counts().min()
@@ -146,7 +155,7 @@ def train_models(df, text_column, target_column, allowed_class, df_category_mapp
         test_size       = 0
 
         if num_classes < 2:
-            # Single class — no eval split possible
+            # Single class — no eval split needed, go straight to final fit
             print(f"{key} | Single class only.")
             train_size   = len(X)
             total_train += train_size
@@ -154,45 +163,32 @@ def train_models(df, text_column, target_column, allowed_class, df_category_mapp
         else:
             # Multi-class: evaluate on held-out split
             stratify_arg = y if min_class_count >= 5 else None
-            try:
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=0.2, stratify=stratify_arg, random_state=42
-                )
-                eval_model = _build_pipeline(seasonal_words)
-                eval_model.fit(X_train, y_train)
-                y_pred   = eval_model.predict(X_test)
-                test_f1  = f1_score(y_test, y_pred, average="macro")
-                test_acc = accuracy_score(y_test, y_pred)
-                metrics  = {"test_accuracy": float(test_acc), "test_f1_macro": float(test_f1)}
-                train_size   = len(X_train)
-                test_size    = len(X_test)
-                total_train += train_size
-                total_test  += test_size
-                print(f"{key} | Test F1: {test_f1:.3f} | Test Accuracy: {test_acc:.3f}")
-                key_results[str(key)] = {
-                    "type":          "trained",
-                    "value":         float(test_acc),
-                    "train_size":    train_size,
-                    "test_size":     test_size,
-                    "test_accuracy": str(round(test_acc, 4)),
-                    "test_f1_macro": str(round(test_f1,  4)),
-                }
-            except ValueError as e:
-                if "empty vocabulary" not in str(e).lower():
-                    raise
-                print(f"{key} --> Metrics skipped: empty vocabulary in eval.")
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, stratify=stratify_arg, random_state=42
+            )
+            eval_model = _build_pipeline(seasonal_words)
+            eval_model.fit(X_train, y_train)
+            y_pred   = eval_model.predict(X_test)
+            test_f1  = f1_score(y_test, y_pred, average="macro")
+            test_acc = accuracy_score(y_test, y_pred)
+            metrics  = {"test_accuracy": float(test_acc), "test_f1_macro": float(test_f1)}
+            train_size   = len(X_train)
+            test_size    = len(X_test)
+            total_train += train_size
+            total_test  += test_size
+            print(f"{key} | Test F1: {test_f1:.3f} | Test Accuracy: {test_acc:.3f}")
+            key_results[str(key)] = {
+                "type":          "trained",
+                "value":         float(test_acc),
+                "train_size":    train_size,
+                "test_size":     test_size,
+                "test_accuracy": str(round(test_acc, 4)),
+                "test_f1_macro": str(round(test_f1,  4)),
+            }
 
         # Train final model on full data
         model = _build_pipeline(seasonal_words)
-        try:
-            model.fit(X, y)
-        except ValueError as e:
-            if "empty vocabulary" in str(e).lower():
-                print(f"{key} --> Skipped: empty vocabulary after preprocessing.")
-                skipped_groups.append(str(key))
-                key_results[str(key)] = {"type": "skipped_vocab"}
-                continue
-            raise
+        model.fit(X, y)
 
         # Save model
         safe_key       = str(key).replace("/", "_").replace("\\", "_")
