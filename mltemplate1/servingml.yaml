@@ -1,19 +1,21 @@
 apiVersion: ai.sap.com/v1alpha1
 kind: ServingTemplate
 metadata:
-  name: naive-bayes-prediction
+  name: naive-bayes-prediction-v3
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline"
-    scenarios.ai.sap.com/name: "naive-bayes"
-    executables.ai.sap.com/description: "naive-bayes prediction"
-    executables.ai.sap.com/name: "naive-bayes-prediction"
+    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v3 multi-market"
+    scenarios.ai.sap.com/name: "naive-bayes-v3"
+    executables.ai.sap.com/description: "naive-bayes prediction-v3"
+    executables.ai.sap.com/name: "naive-bayes-prediction-v3"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes"
-    ai.sap.com/version: "1.0.1"
+    scenarios.ai.sap.com/id: "naive-bayes-v3"
+    ai.sap.com/version: "1.0.0"
 spec:
   inputs:
     artifacts:
-      - name: multinomialNB
+      - name: multinomialNB_HongKong
+      #- name: multinomialNB_Singapore
+      #- name: multinomialNB_Malaysia
   template:
     apiVersion: "serving.kserve.io/v1beta1"
     metadata:
@@ -25,16 +27,18 @@ spec:
         maxReplicas: 2
         containers:
           - name: kserve-container
-            image: docker.io/rahulcruze786/ml_prediction:v1.7
+            image: docker.io/rahulcruze786/ml_prediction:v1.9
             ports:
               - containerPort: 8080
                 protocol: TCP
-            command: ["python"]
-            args:
-              - "prediction/app.py"
+            command: ["python", "app.py"]
             env:
-              - name: STORAGE_URI
-                value: "{{inputs.artifacts.multinomialNB}}"
+              - name: STORAGE_URI_HONGKONG
+                value: "{{inputs.artifacts.multinomialNB_HongKong}}"
+              #- name: STORAGE_URI_SINGAPORE
+              #  value: "{{inputs.artifacts.multinomialNB_Singapore}}"
+              #- name: STORAGE_URI_MALAYSIA
+              #  value: "{{inputs.artifacts.multinomialNB_Malaysia}}"
               - name: MODEL_PATH
                 value: "/mnt/models"
             resources:
