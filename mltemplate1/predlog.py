@@ -1,11 +1,2 @@
-ALL_METADATA = None
-ALL_MODELS   = None
-
-@app.before_request
-def load_models_once():
-    global ALL_METADATA, ALL_MODELS
-    if ALL_METADATA is None:
-        print("🚀 Loading all market models...")
-        ALL_METADATA = load_metadata()
-        ALL_MODELS   = load_models(ALL_METADATA)
-        print(f"✅ Markets loaded: {list(ALL_MODELS.keys())}")
+	
+error when patching "/dev/shm/1521318519": admission webhook "servingtemplatevalidator.ai.sap.com" denied the request: v1alpha1.ai.sap.com "naive-bayes-prediction-v3" is invalid: spec.template: Invalid value: "predictor:\n minReplicas: 1\n maxReplicas: 2\n containers:\n - name: kserve-container\n image: docker.io/rahulcruze786/ml_prediction:v1.9\n ports:\n - containerPort: 8080\n protocol: TCP\n command: [\"python\", \"app.py\"]\n env:\n - name: STORAGE_URI_HONGKONG\n value: \"{{inputs.artifacts.multinomialNB_HongKong}}\"\n #- name: STORAGE_URI_SINGAPORE\n # value: \"{{inputs.artifacts.multinomialNB_Singapore}}\"\n #- name: STORAGE_URI_MALAYSIA\n # value: \"{{inputs.artifacts.multinomialNB_Malaysia}}\"\n - name: MODEL_PATH\n value: \"/mnt/models\"\n resources:\n requests:\n cpu: \"0.5\"\n memory: \"512Mi\"\n limits:\n cpu: \"1\"\n memory: \"1Gi\"\n": failed to resolve {{inputs.artifacts.multinomialNB_Malaysia}}
