@@ -1,1 +1,2 @@
 returns a list of strings — one cleaned string per row:
+# True  → all empty → skip
