@@ -1,19 +1,21 @@
 apiVersion: ai.sap.com/v1alpha1
 kind: ServingTemplate
 metadata:
-  name: naive-bayes-prediction-v3
+  name: naive-bayes-prediction-v4
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v3"
-    scenarios.ai.sap.com/name: "naive-bayes-v3"
-    executables.ai.sap.com/description: "naive-bayes prediction-v3"
-    executables.ai.sap.com/name: "naive-bayes-prediction-v3"
+    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v4 multi-market"
+    scenarios.ai.sap.com/name: "naive-bayes-v4"
+    executables.ai.sap.com/description: "naive-bayes prediction-v4"
+    executables.ai.sap.com/name: "naive-bayes-prediction-v4"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes-v3"
+    scenarios.ai.sap.com/id: "naive-bayes-v4"
     ai.sap.com/version: "1.0.0"
 spec:
   inputs:
     artifacts:
-      - name: multinomialNB
+      - name: multinomialNB-HongKong
+      - name: multinomialNB-Singapore
+      - name: multinomialNB-Malaysia
   template:
     apiVersion: "serving.kserve.io/v1beta1"
     metadata:
@@ -29,12 +31,14 @@ spec:
             ports:
               - containerPort: 8080
                 protocol: TCP
-            command: ["python","app.py"]
-            #args:
-              #- "prediction/app.py"
+            command: ["python", "app.py"]
             env:
-              - name: STORAGE_URI
-                value: "{{inputs.artifacts.multinomialNB}}"
+              - name: STORAGE_URI_HONGKONG
+                value: "{{inputs.artifacts.multinomialNB-HongKong}}"
+              - name: STORAGE_URI_SINGAPORE
+                value: "{{inputs.artifacts.multinomialNB-Singapore}}"
+              - name: STORAGE_URI_MALAYSIA
+                value: "{{inputs.artifacts.multinomialNB-Malaysia}}"
               - name: MODEL_PATH
                 value: "/mnt/models"
             resources:
