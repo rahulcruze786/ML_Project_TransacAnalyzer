@@ -16,31 +16,10 @@ spec:
 
     - name: training-pipeline
       steps:
-        - - name: train-hongkong
+        - - name: train
             template: train-step
-            arguments:
-              parameters:
-                - name: market
-                  value: "Hong Kong"
-
-          - name: train-singapore
-            template: train-step
-            arguments:
-              parameters:
-                - name: market
-                  value: "Singapore"
-
-          - name: train-malaysia
-            template: train-step
-            arguments:
-              parameters:
-                - name: market
-                  value: "Malaysia"
 
     - name: train-step
-      inputs:
-        parameters:
-          - name: market
       metadata:
         labels:
           ai.sap.com/resourcePlan: starter
@@ -53,11 +32,16 @@ spec:
           - name: MODEL_DIR
             value: "/tmp/models"
           - name: MARKET
-            value: "{{inputs.parameters.market}}"
+            value: "{{workflow.parameters.market}}"
       outputs:
         artifacts:
           - name: model-output
-            globalName: "NBmodels-{{inputs.parameters.market}}"
+            globalName: NBmodels
             path: /tmp/models
             archive:
               none: {}
+
+  arguments:
+    parameters:
+      - name: market
+        value: "Hong Kong"          # default — overridden per execution
