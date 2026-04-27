@@ -39,6 +39,8 @@ spec:
                 value: "{{inputs.artifacts.multinomialNB_2}}"  
               - name: MODEL_PATH
                 value: "/mnt/models"
+              - name: MODEL_PATH1
+                value: "/mnt/models1"
             resources:
               requests:
                 cpu: "0.5"
