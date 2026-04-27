@@ -39,7 +39,7 @@ spec:
                 value: "/mnt/models"
               - name: PRIMARY_MARKET
                 value: "Hong_Kong"
-              - name: STORAGE_URI_Singapore
+              - name: STORAGE_URI_SINGAPORE
                 value: "{{inputs.artifacts.multinomialNB_Singapore}}"
             resources:
               requests:
