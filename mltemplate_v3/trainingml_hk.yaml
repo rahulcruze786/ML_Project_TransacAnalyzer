@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: naive-bayes-training-hk
+  annotations:
+    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-hk"
+    scenarios.ai.sap.com/name: "naive-bayes-sg-hk"
+    executables.ai.sap.com/description: "naive-bayes model-hk"
+    executables.ai.sap.com/name: "naive-bayes-training-hk"
+  labels:
+    scenarios.ai.sap.com/id: "naive-bayes-sg-hk"
+    ai.sap.com/version: "1.0.0"
+spec:
+  entrypoint: training-pipeline
+  templates:
+    - name: training-pipeline
+      steps:
+        - - name: train
+            template: train-step
+
+    - name: train-step
+      metadata:
+        labels:
+          ai.sap.com/resourcePlan: starter
+      container:
+        image: docker.io/rahulcruze786/ml_training_model:v1.9
+        command: ["python"]
+        args:
+          - "metrics.py"
+        env:
+          - name: MODEL_DIR
+            value: "/tmp/models"
+          - name: MARKET
+            value: "{{workflow.parameters.market}}"
+      outputs:
+        artifacts:
+          - name: model-output
+            globalName: "{{workflow.parameters.artifactName}}"
+            path: /tmp/models          # ← only output models here
+            archive:
+              none: {}
+
+  arguments:
+    parameters:
+      - name: market
+        value: "Hong Kong" 
+      - name: artifactName
+        value: "multinomialNB_HongKong"
