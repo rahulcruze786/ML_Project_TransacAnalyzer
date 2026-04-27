@@ -17,7 +17,7 @@ spec:
       steps:
         - - name: train
             template: train-step
-
+ 
     - name: train-step
       metadata:
         labels:
@@ -32,17 +32,18 @@ spec:
             value: "/tmp/models"
           - name: MODEL_DIR1
             value: "/tmp/models1"
-            
       outputs:
         artifacts:
           - name: model-output
             globalName: multinomialNB
-            path: /tmp/models          # ← only output models here
+            path: /tmp/models
+            type: model                  # ← added
             archive:
               none: {}
-
+ 
           - name: model-output1
             globalName: multinomialNB1
-            path: /tmp/models1          # ← only output models here
+            path: /tmp/models1
+            type: model                  # ← added
             archive:
               none: {}
