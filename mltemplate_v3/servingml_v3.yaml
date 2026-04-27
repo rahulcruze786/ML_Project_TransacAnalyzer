@@ -14,7 +14,6 @@ spec:
   inputs:
     artifacts:
       - name: multinomialNB_HongKong
-      - name: multinomialNB_Singapore
 
   template:
     apiVersion: "serving.kserve.io/v1beta1"
@@ -39,8 +38,6 @@ spec:
                 value: "/mnt/models"
               - name: PRIMARY_MARKET
                 value: "Hong_Kong"
-              - name: STORAGE_URI_SINGAPORE
-                value: "{{inputs.artifacts.multinomialNB_Singapore}}"
             resources:
               requests:
                 cpu: "0.5"
