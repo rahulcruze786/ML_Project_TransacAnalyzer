@@ -1,212 +1,259 @@
-def train_models(df, text_column, target_column, allowed_class, df_category_mapping,
-                 market, process_types, key_cols=None, seasonal_words=""):
-    
-    # ── Initialize SAP AI Core tracking ──────────────────────────────────────
-    try:
-        tracker = Tracking()
-        tracking_enabled = True
-        print("SAP AI Core tracking initialized.")
-    except Exception as e:
-        print(f"Tracking not available (running locally?): {e}")
-        tracker = None
-        tracking_enabled = False
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score, accuracy_score
+from sklearn.preprocessing import FunctionTransformer
+import joblib
+import sys
+import os
+import json
+import importlib
 
+# Add shared folder to path so preprocess_text.py can be found
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'shared'))        # ✅ Docker: /app/shared
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))  # ✅ Local: ../shared
+_preprocess_module = importlib.import_module("preprocess_text")
+
+preprocess_transform = _preprocess_module.transform
+col_aggreate = _preprocess_module.col_aggreate
+
+CONFIG_FILENAME = "model_config.json"
+
+# ________________________Internal Helper Functions_____________________________________
+#If there are keys other than default(ExpenseType) coming from the user via UI then splits the keys(if more than one) column and clear it by strip 
+def _normalize_key_cols(key_cols):
+    if key_cols is None:
+        return []
+    if isinstance(key_cols, str):
+        return [col.strip() for col in key_cols.split(",") if col.strip()]
+    return list(key_cols)
+
+
+def _build_pipeline(seasonal_words):
+    return Pipeline([
+        (
+            "preprocess",
+            FunctionTransformer(
+                preprocess_transform,
+                validate=False,
+                kw_args={"seasonal_words": seasonal_words},
+            ),
+        ),
+        ("tfidf", TfidfVectorizer()),
+        ("nb", MultinomialNB()),
+    ])
+
+
+def _map_expense_type_from_category_mapping(df,df_category_mapping,market,process_types):
+    # 1: Create a filtered account_expense mapping dataframe basis on Market + Process_Type
+    filtered_mapping = df_category_mapping[(df_category_mapping["Market"].astype(str) == str(market)) & (df_category_mapping["ProcessType"].isin(process_types))].copy()
+    #Keep the two columns "Account", "ExpenseType" from the filtered_mapping and drop rows where account is duplicate
+    account_to_expense = (filtered_mapping[["Account", "ExpenseType"]].dropna(subset=["Account"]).drop_duplicates(subset=["Account"], keep="first"))
+    # Cast Amount to str datatype if there any
+    account_to_expense["Account"] = account_to_expense["Account"].astype(str)
+
+    # 2: Direct mapping from GLAccount (df) to Account (category mapping).
+    expense_map = dict(zip(account_to_expense["Account"], account_to_expense["ExpenseType"]))
+    df["ExpenseType"] = df["GLAccount"].astype(str).map(expense_map).fillna("")
+    return df
+
+# ______________________Main training function_____________________________________
+def train_models(df, text_column, target_column,allowed_class, df_category_mapping, market, process_types, key_cols=None, seasonal_words=""):
+
+    # ── 1. Filter dataframe basis on allowed classes from target column ────────────────────────────────────────────────────────
     df = df.copy()
     df = df[df[target_column].notna()]
     df = df[df[target_column].astype(str).str.strip() != ""]
     df = df[df[target_column].isin(allowed_class)]
-    key_cols = _normalize_key_cols(key_cols)
-    df = _map_expense_type_from_category_mapping(
-        df=df, df_category_mapping=df_category_mapping,
-        market=market, process_types=process_types
-    )
 
+    key_cols = _normalize_key_cols(key_cols) # creating "key_cols" list of clean key column given by the USER by calling function 
+    
+    # ── 2. Creating dataframe by mapping expenseType to training dataset along with Market+ProcessType specific Records only
+    df = _map_expense_type_from_category_mapping(df=df,df_category_mapping=df_category_mapping,market=market,process_types=process_types)
+
+    # Filter out rows where ExpenseType could not be mapped (empty string) : To Highlight this to trainer who is doing training. so that if required the trainer can update the AccontExpense mapping table.
     unmatched = df[df["ExpenseType"].astype(str).str.strip() == ""]
     if not unmatched.empty:
-        print(f"Warning: {len(unmatched)} rows skipped - no matching ExpenseType.")
+        print(f"Warning: {len(unmatched)} rows had no matching ExpenseType and will be skipped. Unmatched GLAccounts: {unmatched['GLAccount'].unique().tolist()} Need to update the account mapping table")
+    unmatched_accounts = unmatched["GLAccount"].unique().tolist() if not unmatched.empty else []
+    # ── 3. Training Data in which account are matched with Account Expense mapping table will go the training:
     df = df[df["ExpenseType"].astype(str).str.strip() != ""]
 
+    # ── 4. Build key column ---> ExpenseType is always the default key; append optional user-provided keys.
     effective_key_cols = ["ExpenseType"] + key_cols
     df["key"] = col_aggreate(df, effective_key_cols)
-
-    # ── Log dataset-level execution metrics (step 0) ─────────────────────────
-    if tracking_enabled:
-        tracker.log_metrics(metrics=[
-            Metric(
-                name="total_rows",
-                value=float(len(df)),
-                timestamp=datetime.now(timezone.utc),
-                step=0,
-                labels=[MetricLabel(name="phase", value="data_load")]
-            ),
-            Metric(
-                name="num_key_groups",
-                value=float(df["key"].nunique()),
-                timestamp=datetime.now(timezone.utc),
-                step=0,
-                labels=[MetricLabel(name="phase", value="data_load")]
-            ),
-            Metric(
-                name="unmatched_rows",
-                value=float(len(unmatched)),
-                timestamp=datetime.now(timezone.utc),
-                step=0,
-                labels=[MetricLabel(name="phase", value="data_load")]
-            ),
-        ])
-
+    
+    # ──5. Init metadata & counters ──────────────────────────────────────────────
     metadata = {
         "key_cols": effective_key_cols,
         "text_column": text_column,
         "target_column": target_column,
-        "allowed_class": list(allowed_class),
+        "allowed_class" : list(allowed_class),
         "seasonal_words": seasonal_words,
         "market": market,
         "process_types": list(process_types),
-        "models": {}
-    }
+        "models": {}}
 
     saved_models = []
-    model_dir = os.environ.get("MODEL_DIR", "/tmp/models")
+    skipped_groups = []
+    total_train = 0
+    total_test = 0
+    key_results     = {}   # ← ADD: stores result per key, logged after loop
+
+    #model_dir = os.path.join(os.path.dirname(__file__), '..', 'models')
+    # ✅ New: SAP AI Core mounts Object Store to /app/models at runtime
+    #model_dir = os.path.join(os.environ.get("MODEL_DIR", "/tmp/models"), market.replace(" ","_"))
+    model_dir = os.environ.get("MODEL_OUTPUT_PATH", "/tmp/models")
+    model_dir1 = os.environ.get("MODEL_OUTPUT_PATH1", "/tmp/models1")
     print(f"ENV MODEL_DIR = {model_dir}")
+    print(f"ENV MODEL_DIR1 = {model_dir1}")
     os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(model_dir1, exist_ok=True)
 
+     # ──6. Training loop ─────────────────────────────────────────────────────────
     grouped = df.groupby("key")
-    
-    for step_idx, (key, group) in enumerate(grouped, start=1):
+    for key, group in grouped:
         texts = group[text_column].fillna("").astype(str)
-        if texts.str.strip().eq("").all():
-            print(f"{key} --> Skipped: all text empty.")
-            continue
-
         X = texts
         y = group[target_column]
+
+        # ── Gate 1: check preprocessed vocabulary is non-empty ────────────────
+        # Run the same cleaning that TfidfVectorizer will see. If nothing survives
+        # stop here with one clear message empty vocabulary after preprocessing
+        cleaned = preprocess_transform(X.tolist(), seasonal_words) #returns a list of strings — one cleaned string per row
+        if not any(t.strip() for t in cleaned): # True  → all empty  (any --> any empty, not any() --> all empty) # if t.strip() is not generated any value for all row in cleaned then TRUE
+            print(f"{key} --> Skipped: empty vocabulary after preprocessing.")
+            skipped_groups.append(str(key))
+            key_results[str(key)] = {"type": "skipped_vocab"}
+            continue
+
+        # ── Gate 2: check raw text is not entirely blank ──────────────────────
+        if X.str.strip().eq("").all():
+            print(f"{key} --> Skipped: all text empty.")
+            skipped_groups.append(str(key))
+            key_results[str(key)] = {"type": "skipped_empty_text"}
+            continue
+
+
         num_classes = y.nunique()
         min_class_count = y.value_counts().min()
         metrics = {"test_accuracy": None, "test_f1_macro": None}
+        train_size      = 0
+        test_size       = 0
 
-        if num_classes >= 2:
-            stratify_arg = y if min_class_count >= 5 else None
-            try:
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=0.2, stratify=stratify_arg, random_state=42
-                )
-                eval_model = _build_pipeline(seasonal_words)
-                eval_model.fit(X_train, y_train)
-                y_pred = eval_model.predict(X_test)
-                test_f1 = f1_score(y_test, y_pred, average="macro")
-                test_acc = accuracy_score(y_test, y_pred)
-                metrics = {
-                    "test_accuracy": float(test_acc),
-                    "test_f1_macro": float(test_f1)
-                }
-                print(f"{key} | Test F1: {test_f1:.3f} | Test Accuracy: {test_acc:.3f}")
+        if num_classes < 2:
+            # Single class — no eval split needed, go straight to final fit
+            print(f"{key} | Single class only.")
+            train_size   = len(X)
+            total_train += train_size
 
-                # ── Log per-key execution metrics (step = key group index) ───
-                if tracking_enabled:
-                    tracker.log_metrics(metrics=[
-                        Metric(
-                            name="test_accuracy",
-                            value=float(test_acc),
-                            timestamp=datetime.now(timezone.utc),
-                            step=step_idx,
-                            labels=[MetricLabel(name="key_group", value=str(key))]
-                        ),
-                        Metric(
-                            name="test_f1_macro",
-                            value=float(test_f1),
-                            timestamp=datetime.now(timezone.utc),
-                            step=step_idx,
-                            labels=[MetricLabel(name="key_group", value=str(key))]
-                        ),
-                        Metric(
-                            name="train_size",
-                            value=float(len(X_train)),
-                            timestamp=datetime.now(timezone.utc),
-                            step=step_idx,
-                            labels=[MetricLabel(name="key_group", value=str(key))]
-                        ),
-                    ])
-
-            except ValueError as e:
-                if "empty vocabulary" not in str(e).lower():
-                    raise
-                print(f"{key} --> Metrics skipped: empty vocabulary.")
+        # ── Check 3: multi class evaluate on held-out split ──────────────────────────────────────────────
         else:
-            print(f"{key} | Single class only, metrics skipped.")
+            stratify_arg = y if min_class_count >= 5 else None
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=stratify_arg, random_state=42)
+            eval_model = _build_pipeline(seasonal_words)
+            eval_model.fit(X_train, y_train)
+            y_pred   = eval_model.predict(X_test)
+            test_f1  = f1_score(y_test, y_pred, average="macro")
+            test_acc = accuracy_score(y_test, y_pred)
+            metrics  = {"test_accuracy": float(test_acc), "test_f1_macro": float(test_f1)}
+            train_size   = len(X_train)
+            test_size    = len(X_test)
+            total_train += train_size
+            total_test  += test_size
+            print(f"{key} | Test F1: {test_f1:.3f} | Test Accuracy: {test_acc:.3f}")
+            key_results[str(key)] = {
+                    "type":         "trained",
+                    "value":        float(test_acc),
+                    "train_size":   train_size,
+                    "test_size":    test_size,
+                    "test_accuracy":str(round(test_acc, 4)),
+                    "test_f1_macro":str(round(test_f1,  4)),
+                }
 
+        # ── Train final model on full data except gate1 and gate2────────────────────────────────────
         model = _build_pipeline(seasonal_words)
-        try:
-            model.fit(X, y)
-        except ValueError as e:
-            if "empty vocabulary" in str(e).lower():
-                print(f"{key} --> Skipped: empty vocabulary.")
-                continue
-            raise
+        model.fit(X, y)
 
-        safe_key = str(key).replace("/", "_").replace("\\", "_")
+        # ── Save model ────────────────────────────────────────────────────────
+        safe_key       = str(key).replace("/", "_").replace("\\", "_")
         model_filename = f"model_{safe_key}.joblib"
-        model_path = os.path.join(model_dir, model_filename)
+        model_path     = os.path.join(model_dir, model_filename)
         joblib.dump(model, model_path)
-
+        joblib.dump(model, os.path.join(model_dir1, model_filename))
         metadata["models"][str(key)] = {
             "model_file": model_filename,
-            "metrics": metrics
+            "metrics":    metrics,
+            "train_size": train_size,
+            "test_size":  test_size,
         }
         saved_models.append(model_path)
+        # store single_class result only if not already overwritten by skipped_vocab
+        if str(key) not in key_results:
+            key_results[str(key)] = {
+                "type": "single_class",
+                "class_found": str(y.unique()[0]),
+                "train_size": train_size,
+            }
+
 
     if not saved_models:
         return (
-            f"No models saved for {len(df)} rows across {df['key'].nunique()} key group(s)."
+            f"No models were saved for {len(df)} rows across {df['key'].nunique()} key group(s). "
+            "Check input data, grouping keys, and text content."
         )
 
-    # ── Log final summary execution metrics ──────────────────────────────────
-    if tracking_enabled and saved_models:
-        # Collect only non-None accuracies and F1s for summary
-        all_acc = [
-            v["metrics"]["test_accuracy"]
-            for v in metadata["models"].values()
-            if v["metrics"]["test_accuracy"] is not None
-        ]
-        all_f1 = [
-            v["metrics"]["test_f1_macro"]
-            for v in metadata["models"].values()
-            if v["metrics"]["test_f1_macro"] is not None
-        ]
-        summary_metrics = [
-            Metric(
-                name="models_saved",
-                value=float(len(saved_models)),
-                timestamp=datetime.now(timezone.utc),
-                step=9999,
-                labels=[MetricLabel(name="phase", value="summary")]
-            ),
-        ]
-        if all_acc:
-            summary_metrics.append(Metric(
-                name="avg_test_accuracy",
-                value=float(sum(all_acc) / len(all_acc)),
-                timestamp=datetime.now(timezone.utc),
-                step=9999,
-                labels=[MetricLabel(name="phase", value="summary")]
-            ))
-        if all_f1:
-            summary_metrics.append(Metric(
-                name="avg_test_f1_macro",
-                value=float(sum(all_f1) / len(all_f1)),
-                timestamp=datetime.now(timezone.utc),
-                step=9999,
-                labels=[MetricLabel(name="phase", value="summary")]
-            ))
-        tracker.log_metrics(metrics=summary_metrics)
-        print("Execution metrics logged to SAP AI Core.")
-
+   
     config_path = os.path.join(model_dir, CONFIG_FILENAME)
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
+    config_path1 = os.path.join(model_dir1, CONFIG_FILENAME)
+    with open(config_path1, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+    
     print("\n===== Metadata saved to config =====")
     print(json.dumps(metadata, indent=2))
     print("=====================================\n")
 
-    return f"Saved {len(saved_models)} model(s): {saved_models}. Config: {config_path}"
+
+
+    message = f"Saved {len(saved_models)} model(s): {saved_models}. Metadata saved to: {config_path}"
+    print(f"model_dir: {os.listdir(model_dir)}")
+    print(f"model_dir1: {os.listdir(model_dir1)}")
+    return message, metadata, key_results, unmatched_accounts, total_train, total_test
+
+
+if __name__ == "__main__":
+    #df = pd.read_excel(r"C:\Users\2016565\Downloads\input-data\Training_data_2021_2022_2023 - SAP Format.xlsx")
+    #df_category_mapping = pd.read_excel(r"C:\Users\2016565\Downloads\input-data\Tax_code_mapping.xlsx")
+    # Import hdi_data from shared folder
+    hdi_data = importlib.import_module("hdi_data")
+
+    # Connect to HDI
+    conn = hdi_data.get_hdi_connection()
+    schema = "T1_TXNANAL_PHY"
+
+    # Load data from HDI tables
+    df = hdi_data.read_hdi_table(conn, schema, "JRNLFEATURE")
+    df_category_mapping = hdi_data.read_hdi_table(conn, schema, "Accountaxcode")
+
+    conn.close()
+    
+    text_column = "TEXT(S4Journal)"
+    target_column = "taxcategory"
+    allowed_class = ['Deductible','Non-deductible']
+    seasonal_words = "mbfc,cbp,rcls"
+    key_cols = None #["GLAccount"]
+    market = "Hong Kong"
+    process_types = ["Provisions and Payments of Operating Losses (B/S)","Provisions and Payments of Operating Losses (P/L)"]
+
+    #print(
+    train_models(df,text_column=text_column,target_column=target_column,allowed_class = allowed_class,df_category_mapping=df_category_mapping,
+            key_cols=key_cols,seasonal_words=seasonal_words,market=market,process_types=process_types)
+    #)
+
+
+
