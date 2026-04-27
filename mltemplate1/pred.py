@@ -14,13 +14,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))  # L
 import numpy as np
 import pandas as pd
 import time
-#import boto3
 import joblib
 
 # ── Import shared modules once at module level ────────────────
 _preprocess_module = importlib.import_module("preprocess_text")
-preprocess_method  = _preprocess_module.preprocess_method   # ✅ replaces preprocess_line_description
-col_aggreate       = _preprocess_module.col_aggreate        # ✅ replaces generate_key
+preprocess_method  = _preprocess_module.preprocess_method
+col_aggreate       = _preprocess_module.col_aggreate
 
 _hdi_module        = importlib.import_module("hdi_data")
 get_hdi_connection = _hdi_module.get_hdi_connection
@@ -30,13 +29,70 @@ write_hdi_table    = _hdi_module.write_hdi_table
 app = Flask(__name__, static_folder="webapp", static_url_path="")
 CORS(app)
 
+# ── CHANGE 1: MODEL_DIR moved here — must be defined before any function uses it ──
+# Previously MODEL_DIR was defined after @app.before_request which caused fragile ordering.
+MODEL_DIR = os.environ.get("MODEL_PATH", "/mnt/models")
+
+# ── CHANGE 2: Lazy-loaded globals — None until first request fires ─────────────
+# Previously was module-level load which crashed because /mnt/models
+# doesn't exist yet when the container starts (SAP AI Core mounts artifacts
+# only after the container is running, not before).
 ALL_METADATA = None
 ALL_MODELS   = None
 
+
+# ── CHANGE 3: New function — downloads all market artifacts from object store ──
+# Scans all env vars starting with STORAGE_URI_ and downloads each one
+# into MODEL_DIR/<market> subfolder dynamically.
+# Zero code change needed when adding new markets — just add STORAGE_URI_<MARKET>
+# to the serving YAML env section.
+#
+# Naming convention (must match trainer.py market subfolder):
+#   STORAGE_URI_HONG_KONG  → /mnt/models/Hong_Kong/
+#   STORAGE_URI_SINGAPORE  → /mnt/models/Singapore/
+#   STORAGE_URI_MALAYSIA   → /mnt/models/Malaysia/
+def _download_market_artifacts():
+    import subprocess
+
+    storage_vars = {
+        key: value
+        for key, value in os.environ.items()
+        if key.startswith("STORAGE_URI_")
+    }
+
+    if not storage_vars:
+        # Running locally or models already mounted — skip download silently
+        print("⚠️ No STORAGE_URI_* env vars found. Assuming models already mounted locally.")
+        return
+
+    for env_key, uri in storage_vars.items():
+        # Convert env key suffix to folder name matching trainer.py convention:
+        # STORAGE_URI_HONG_KONG → "HONG_KONG" → "Hong Kong" → "Hong_Kong"
+        market_folder = env_key.replace("STORAGE_URI_", "").replace("_", " ").title().replace(" ", "_")
+        dest          = os.path.join(MODEL_DIR, market_folder)
+        os.makedirs(dest, exist_ok=True)
+        print(f"📥 Downloading [{market_folder}] from {uri} → {dest}")
+        try:
+            subprocess.run(
+                ["aws", "s3", "sync", uri, dest, "--no-progress"],
+                check=True
+            )
+            print(f"✅ [{market_folder}] downloaded successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to download [{market_folder}]: {e}")
+            raise
+
+
+# ── CHANGE 4: @app.before_request replaces module-level startup load ──────────
+# Flask calls this automatically before every request.
+# The `if ALL_METADATA is None` guard ensures models load only ONCE
+# (on the very first request), not on every request.
+# This fires AFTER SAP AI Core has mounted the artifacts, so /mnt/models exists.
 @app.before_request
 def load_models_once():
     global ALL_METADATA, ALL_MODELS
     if ALL_METADATA is None:
+        _download_market_artifacts()        # ← CHANGE 5: download artifacts first
         print("🚀 Loading all market models...")
         ALL_METADATA = load_metadata()
         ALL_MODELS   = load_models(ALL_METADATA)
@@ -52,13 +108,13 @@ def root():
 def serve_static(filename):
     return send_from_directory(app.static_folder, filename)
 
-MODEL_DIR = os.environ.get("MODEL_PATH",  "/mnt/models")
 
+# ── CHANGE 6: load_metadata now scans market subfolders instead of flat dir ───
+# Previously read a single model_config.json from MODEL_DIR root.
+# Now scans MODEL_DIR for subdirectories (one per market) and loads
+# each market's model_config.json.
+# Returns: { "Hong_Kong": metadata_dict, "Singapore": metadata_dict, ... }
 def load_metadata():
-    """
-    Scan MODEL_DIR for market subfolders, load each market's model_config.json.
-    Returns dict: { "Hong_Kong": metadata_dict, "Singapore": metadata_dict, ... }
-    """
     all_metadata = {}
     if not os.path.exists(MODEL_DIR):
         raise FileNotFoundError(f"MODEL_DIR not found: {MODEL_DIR}")
@@ -80,11 +136,11 @@ def load_metadata():
     return all_metadata
 
 
+# ── CHANGE 7: load_models now loads all markets into nested dict ──────────────
+# Previously loaded from a flat MODEL_DIR into { key: model }.
+# Now loads per market from MODEL_DIR/<market>/ into
+# { "Hong_Kong": { key: model }, "Singapore": { key: model }, ... }
 def load_models(all_metadata):
-    """
-    Load all model files for all markets.
-    Returns dict: { "Hong_Kong": { key: model }, "Singapore": { key: model }, ... }
-    """
     all_models = {}
     for market, metadata in all_metadata.items():
         market_dir = os.path.join(MODEL_DIR, market)
@@ -105,7 +161,7 @@ def load_models(all_metadata):
 
 
 # ─────────────────────────────────────────────────────────────
-# Prediction Logic
+# Prediction Logic — NO CHANGE
 # ─────────────────────────────────────────────────────────────
 
 def predict(df, models, key_col):
@@ -134,7 +190,6 @@ def predict(df, models, key_col):
         classes  = pipeline.classes_
         best_idx = np.argmax(probs)
 
-        # Get influence words from tfidf step in pipeline
         try:
             tfidf         = pipeline.named_steps['tfidf']
             feature_names = tfidf.get_feature_names_out()
@@ -158,7 +213,7 @@ def predict(df, models, key_col):
 
 
 # ─────────────────────────────────────────────────────────────
-# HDI Config Loader
+# HDI Config Loader — NO CHANGE
 # ─────────────────────────────────────────────────────────────
 
 def _load_hdi_config(conn, schema='T1_TXNANAL_PHY', market=None):
@@ -181,7 +236,10 @@ def process_data(config_params=None, market=None):
     start  = time.time()
     schema = 'T1_TXNANAL_PHY'
 
-    # ── Step 1: Resolve market → pick correct metadata + models ──
+    # ── CHANGE 8: Step 1 replaced — now resolves market key from ALL_METADATA ─
+    # Previously called load_metadata() and load_models() on every request.
+    # Now uses pre-loaded ALL_METADATA and ALL_MODELS globals,
+    # picks the correct market's metadata and models by key.
     market_key = market.replace(" ", "_") if market else None
     if not market_key or market_key not in ALL_METADATA:
         available = list(ALL_METADATA.keys())
@@ -189,19 +247,15 @@ def process_data(config_params=None, market=None):
 
     metadata = ALL_METADATA[market_key]
     models   = ALL_MODELS[market_key]
-    
 
-    # ── Step 2: Extract ALL training values from metadata ─────
-    # ✅ These ALWAYS come from metadata - trainer guarantees they are set
-    # ✅ Never from config_params or HDI config table
-    TEXT_COL       = metadata.get("text_column")        # "TEXT(S4Journal)"
-    LABEL_COL      = metadata.get("target_column")      # "taxcategory"
-    seasonal_words = metadata.get("seasonal_words", "") # "mbfc,cbp,rcls"
-    KEY_COLS       = metadata.get("key_cols")           # ["ExpenseType"] always set by trainer
-    process_types  = metadata.get("process_types")      # ✅ used for account filtering
-    allowed_class  = metadata.get("allowed_class")      # ["Deductible","Non-deductible"]
+    # ── Step 2: Extract ALL training values from metadata — NO CHANGE ─────────
+    TEXT_COL       = metadata.get("text_column")
+    LABEL_COL      = metadata.get("target_column")
+    seasonal_words = metadata.get("seasonal_words", "")
+    KEY_COLS       = metadata.get("key_cols")
+    process_types  = metadata.get("process_types")
+    allowed_class  = metadata.get("allowed_class")
 
-    # ✅ Safety checks - raise clear error if metadata is incomplete
     if not TEXT_COL:
         raise ValueError("❌ Metadata missing 'text_column' - retrain the model!")
     if not KEY_COLS:
@@ -218,6 +272,8 @@ def process_data(config_params=None, market=None):
     print(f"📋 Metadata → seasonal_words: {seasonal_words}")
     print(f"📋 Metadata → allowed_class : {allowed_class}")
 
+    # ── Steps 3–18: NO CHANGE ─────────────────────────────────────────────────
+
     # ── Step 3: Connect to HDI ────────────────────────────────
     conn = get_hdi_connection()
 
@@ -233,7 +289,6 @@ def process_data(config_params=None, market=None):
     ], inplace=True, errors='ignore')
 
     # ── Step 5: Load HDI config + merge with user overrides ───
-    # ✅ HDI config only for overwrite rules & threshold params
     default_config = _load_hdi_config(conn, schema, market)
     if config_params is None:
         config_params = {}
@@ -266,8 +321,7 @@ def process_data(config_params=None, market=None):
 
     AMOUNT_COL = final_config.get('AMOUNT_COL')
 
-    # ── Step 7: Filter accounts using process_types from metadata
-    # ✅ process_types ONLY from metadata - NOT from config_params or HDI config
+    # ── Step 7: Filter accounts using process_types from metadata ─────────────
     print(f"📋 Filtering accounts by process_types from metadata: {process_types}")
     mask              = category_mapping['ProcessType'].isin(process_types)
     required_accounts = category_mapping.loc[mask, "Account"].astype(str).values.tolist()
@@ -278,14 +332,12 @@ def process_data(config_params=None, market=None):
     predict_df.drop(columns=['ProcessType', 'Account', 'IMPORTED', 'Market'], inplace=True, errors='ignore')
 
     # ── Step 9: Preprocess text ───────────────────────────────
-    # ✅ Using shared preprocess_method with seasonal_words from metadata
     predict_df["ProcessedText"] = predict_df[TEXT_COL].apply(
         lambda x: preprocess_method(x, seasonal_words)
     )
     predict_df['Amount(Base)'] = pd.to_numeric(predict_df["Amount(Base)"], errors="coerce")
 
     # ── Step 10: Generate key ─────────────────────────────────
-    # ✅ Using shared col_aggreate with KEY_COLS from metadata (matches trainer exactly)
     predict_df["key"] = col_aggreate(predict_df, KEY_COLS)
 
     # ── Step 11: Run prediction ───────────────────────────────
@@ -377,12 +429,11 @@ def process_data(config_params=None, market=None):
             predict_df.at[index, "ClassProbabilities"] = "N/A"
 
     # ── Step 16: Rename columns ───────────────────────────────
-    predict_df.rename(columns={"Threshold Amount":"ThresholdAmountReached	","Oper Unit Split":"OperUnitSplit"},inplace=True)
+    predict_df.rename(columns={"Threshold Amount": "ThresholdAmountReached\t", "Oper Unit Split": "OperUnitSplit"}, inplace=True)
 
     print(predict_df.columns.tolist())
 
     # ── Step 17: Select final columns ────────────────────────
-    # ✅ TEXT_COL from metadata (not hardcoded "TEXT(S4Journal)")
     predict_df = predict_df[[
         "MTDPeriod", "DocumentNumber", "GLTBSource", "Segment", "PostingDate",
         "GLAccount", "PartnerEntity", "PostingItem", TEXT_COL,
@@ -390,7 +441,7 @@ def process_data(config_params=None, market=None):
         "Amount(Base)", "Amount(Transaction)", "TransactionCurrency",
         "Entity/BU", "SourceDocumentNo", "ExpenseType", "ProcessedText",
         "key", "Prediction ", "Confidence", "InflunceParameter",
-        "ClassProbabilities", "NetOff", "ThresholdAmountReached	", "OperUnitSplit"
+        "ClassProbabilities", "NetOff", "ThresholdAmountReached\t", "OperUnitSplit"
     ]]
 
     # ── Step 18: Write to HDI JRNLOUTPUT ─────────────────────
@@ -414,7 +465,7 @@ def process_data(config_params=None, market=None):
 
 
 # ─────────────────────────────────────────────────────────────
-# Flask Routes
+# Flask Routes — NO CHANGE except get_metadata (CHANGE 9)
 # ─────────────────────────────────────────────────────────────
 
 @app.route('/v1/health')
@@ -472,7 +523,7 @@ def get_account_mapping():
             try: conn.close()
             except: pass
 
-###  -------------Chnage the prediction outputs by the reviewer-------------------------
+
 @app.route('/v1/OverwritePrediction', methods=['POST'])
 def upsert_jrnoutput():
     """
@@ -485,15 +536,12 @@ def upsert_jrnoutput():
         if payload is None:
             return jsonify({"status": "error", "message": "Invalid or missing JSON body"}), 400
 
-        # allow single record or list
         records = payload if isinstance(payload, list) else [payload]
         if not records:
             return jsonify({"status": "error", "message": "No records provided"}), 400
 
-        # define primary keys (same as pipeline)
         primary_keys = ["MTDPeriod", "DocumentNumber", "GLAccount", "PostingItem", "Ledger", "Entity/BU", "SourceDocumentNo"]
 
-        # check presence of primary keys in each record
         missing = []
         for i, rec in enumerate(records):
             for pk in primary_keys:
@@ -502,10 +550,9 @@ def upsert_jrnoutput():
         if missing:
             return jsonify({"status": "error", "message": "Missing primary key(s) in payload", "details": missing}), 400
 
-        # convert to DataFrame and write
-        df = pd.DataFrame(records)
+        df     = pd.DataFrame(records)
         schema = 'T1_TXNANAL_PHY'
-        conn = get_hdi_connection()
+        conn   = get_hdi_connection()
         write_hdi_table(conn, df, schema, "JRNLOUTPUT", primary_keys=primary_keys)
 
         return jsonify({"status": "success", "message": f"Overwrite {len(df)} record(s) to JRNLOUTPUT"}), 200
@@ -514,17 +561,15 @@ def upsert_jrnoutput():
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if conn:
-            try:
-                conn.close()
-            except:
-                pass
+            try: conn.close()
+            except: pass
 
 
 @app.route('/v1/OverwriteReview', methods=['POST'])
 def upsert_jrnreview():
     """
     Accept a JSON object or list of objects with the exact JRNLOUTPUT columns,
-    and write them to HDI table T1_TXNANAL_PHY.JRNLOUTPUT using the same primary keys.
+    and write them to HDI table T1_TXNANAL_PHY.JRNLOPREVIEW using the same primary keys.
     """
     conn = None
     try:
@@ -532,15 +577,12 @@ def upsert_jrnreview():
         if payload is None:
             return jsonify({"status": "error", "message": "Invalid or missing JSON body"}), 400
 
-        # allow single record or list
         records = payload if isinstance(payload, list) else [payload]
         if not records:
             return jsonify({"status": "error", "message": "No records provided"}), 400
 
-        # define primary keys (same as pipeline)
         primary_keys = ["MTDPeriod", "DocumentNumber", "GLAccount", "PostingItem", "Ledger", "Entity/BU", "SourceDocumentNo"]
 
-        # check presence of primary keys in each record
         missing = []
         for i, rec in enumerate(records):
             for pk in primary_keys:
@@ -549,10 +591,9 @@ def upsert_jrnreview():
         if missing:
             return jsonify({"status": "error", "message": "Missing primary key(s) in payload", "details": missing}), 400
 
-        # convert to DataFrame and write
-        df = pd.DataFrame(records)
+        df     = pd.DataFrame(records)
         schema = 'T1_TXNANAL_PHY'
-        conn = get_hdi_connection()
+        conn   = get_hdi_connection()
         write_hdi_table(conn, df, schema, "JRNLOPREVIEW", primary_keys=primary_keys)
 
         return jsonify({"status": "success", "message": f"Overwrite {len(df)} record(s) to JRNLOUTPUT"}), 200
@@ -561,10 +602,8 @@ def upsert_jrnreview():
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if conn:
-            try:
-                conn.close()
-            except:
-                pass
+            try: conn.close()
+            except: pass
 
 
 @app.route('/saveAccountMapping', methods=['GET', 'POST'])
@@ -624,7 +663,7 @@ def process():
     """
     Process prediction pipeline.
     text_column, target_column, key_cols, allowed_class,
-    seasonal_words, process_types → always from S3 metadata (set during training).
+    seasonal_words, process_types → always from metadata (set during training).
     Overwrite rules & threshold params → from HDI config table (can be overridden via request body).
     """
     try:
@@ -646,9 +685,18 @@ def process():
             "traceback": error_detail
         }), 500
 
+
+# ── CHANGE 9: get_metadata updated — supports ?market= param or returns all ───
+# Previously returned single flat metadata dict.
+# Now returns metadata for a specific market (via ?market=Hong Kong)
+# or all markets if no param provided.
 @app.route('/v1/getMetadata', methods=['GET'])
 def get_metadata():
-    """Return metadata for a specific market or all markets."""
+    """Return metadata for a specific market or all markets.
+    Usage:
+        GET /v1/getMetadata              → returns all markets
+        GET /v1/getMetadata?market=Hong Kong → returns Hong Kong only
+    """
     try:
         market = request.args.get('market', None)
         if market:
@@ -663,6 +711,7 @@ def get_metadata():
         return jsonify({"status": "success", "data": ALL_METADATA})
     except Exception as e:
         return make_response(jsonify({"status": "error", "message": str(e)}), 500)
+
 
 '''
 @app.route('/v1/reload-models', methods=['POST'])
