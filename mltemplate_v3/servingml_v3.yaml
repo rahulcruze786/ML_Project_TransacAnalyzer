@@ -32,7 +32,7 @@ spec:
                 protocol: TCP
             command: ["python", "app.py"]
             env:
-              - name: STORAGE_URI_HONGKONG
+              - name: STORAGE_URI
                 value: "{{inputs.artifacts.multinomialNB_HongKong}}"
               - name: MODEL_PATH
                 value: "/mnt/models"
