@@ -1,2 +1,18 @@
-returns a list of strings — one cleaned string per row:
-# True  → all empty → skip
+user: projects $ /home/user/.asdf-inst/shims/python3.13 "/home/user/projects/scallPY copy.py"
+Getting token...
+Token retrieved ✅
+
+Calling Health API...
+Status Code : 500
+Response    : {"message":"\u274c Market 'Hong Kong' not found. Available markets: ['1']","status":"error","traceback":"Traceback (most recent call last):\n  File \"/app/app.py\", line 690, in process\n    result = process_data(config_params=config_params, market=market)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/app.py\", line 240, in process_data\n    raise ValueError(f\"\u274c Market '{market}' not found. Available markets: {available}\")\nValueError: \u274c Market 'Hong Kong' not found. Available markets: ['1']\n"}
+
+Traceback (most recent call last):
+  File "/home/user/projects/scallPY copy.py", line 48, in <module>
+    result = call_health_api(token)
+  File "/home/user/projects/scallPY copy.py", line 38, in call_health_api
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/user/.asdf-inst/installs/python/3.13.1/lib/python3.13/site-packages/requests/models.py", line 1028, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 500 Server Error: Internal Server Error for url: https://api.ai.prod-ap11.ap-southeast-1.aws.ml.hana.ondemand.com/v2/inference/deployments/da768de0f3df1dcd/v1/process
+user: projects $ 
