@@ -4,11 +4,11 @@ metadata:
   name: naive-bayes-training-sg
   annotations:
     scenarios.ai.sap.com/description: "naive-bayes training Pipeline-sg"
-    scenarios.ai.sap.com/name: "naive-bayes-v3"
+    scenarios.ai.sap.com/name: "naive-bayes-sg-hk"
     executables.ai.sap.com/description: "naive-bayes model-sg"
     executables.ai.sap.com/name: "naive-bayes-training-sg"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes-v3"
+    scenarios.ai.sap.com/id: "naive-bayes-sg-hk"
     ai.sap.com/version: "1.0.0"
 spec:
   entrypoint: training-pipeline
