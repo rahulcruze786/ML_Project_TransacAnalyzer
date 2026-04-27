@@ -1,21 +1,55 @@
-def _download_market_artifacts():
-    import boto3
-    import re
-
-    # ── DEBUG: print all env vars to find SAP AI Core S3 credential names ────
-    print("=== ENV VARS (credential-related) ===")
-    for k, v in os.environ.items():
-        if any(x in k.upper() for x in ["AWS", "S3", "ACCESS", "SECRET", "TOKEN", "ENDPOINT", "BUCKET", "STORAGE"]):
-            print(f"  {k} = {v[:20]}...")   # print first 20 chars only for security
-    print("=====================================")
-
-    storage_vars = {
-        key: value
-        for key, value in os.environ.items()
-        if key.startswith("STORAGE_URI_")
-    }
-
-    if not storage_vars:
-        print("ℹ️ No STORAGE_URI_* vars found. Only primary market will be loaded.")
-        return
-    ...
+Timestamp
+Message
+today 2:08:59 AM	
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+today 2:08:59 AM	
+* Running on all addresses (0.0.0.0)
+today 2:08:59 AM	
+* Running on http://127.0.0.1:8080
+today 2:08:59 AM	
+* Running on http://100.64.180.23:8080
+today 2:08:59 AM	
+[33mPress CTRL+C to quit[0m
+today 2:08:59 AM	
+* Debug mode: off
+today 2:08:59 AM	
+* Serving Flask app 'app'
+today 2:08:55 AM	
+INFO:root:Model downloaded in 1.248686483000256 seconds.
+today 2:08:55 AM	
+INFO:root:Successfully copied s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e79ea190ffa10f2a/multinomialNB_HongKong to /mnt/models
+today 2:08:54 AM	
+INFO:botocore.configprovider:Found endpoint for s3 via: environment_global.
+today 2:08:54 AM	
+INFO:botocore.credentials:Found credentials in environment variables.
+today 2:08:54 AM	
+INFO:root:Initializing, args: src_uri [s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e79ea190ffa10f2a/multinomialNB_HongKong] dest_path[ [/mnt/models]
+today 2:08:54 AM	
+INFO:root:Copying contents of s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e79ea190ffa10f2a/multinomialNB_HongKong to local
+today 2:08:54 AM	
+import pkg_resources
+today 2:08:54 AM	
+/usr/local/lib/python3.12/site-packages/google/cloud/storage/_http.py:19: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+today 2:08:52 AM	
+Traceback (most recent call last):
+today 2:08:52 AM	
+File "<frozen site>", line 206, in addpackage
+today 2:08:52 AM	
+File "<string>", line 1, in <module>
+today 2:08:52 AM	
+ModuleNotFoundError: No module named '_distutils_hack'
+today 2:08:52 AM			
+today 2:08:52 AM	
+Remainder of file ignored
+today 2:08:52 AM	
+Traceback (most recent call last):
+today 2:08:52 AM	
+File "<frozen site>", line 206, in addpackage
+today 2:08:52 AM	
+File "<string>", line 1, in <module>
+today 2:08:52 AM	
+ModuleNotFoundError: No module named '_distutils_hack'
+today 2:08:52 AM			
+today 2:08:52 AM			
+today 2:08:52 AM	
+Error processing line 1 of /usr/lib/python3.12/site-packages/distutils-precedence.pth:
