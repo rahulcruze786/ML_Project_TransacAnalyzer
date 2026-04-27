@@ -36,7 +36,7 @@ spec:
                 value: "{{inputs.artifacts.multinomialNB_HongKong}}"
               - name: MODEL_PATH
                 value: "/mnt/models"
-              -name: PRIMARY_MARKET
+              - name: PRIMARY_MARKET
                 value: "Hong_Kong"
             resources:
               requests:
