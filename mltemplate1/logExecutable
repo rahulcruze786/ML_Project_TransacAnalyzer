@@ -1,52 +1,73 @@
-def _download_market_artifacts():
-    """
-    SAP AI Core auto-mounts STORAGE_URI into MODEL_PATH (/mnt/models) — read-only.
-    Additional markets use STORAGE_URI_* env vars and are downloaded into
-    /tmp/models/<market> using boto3 — no aws CLI needed.
-    boto3 is already in requirements.txt so no Docker rebuild for new packages.
-    """
-    import boto3
-    import re
+import requests
 
-    storage_vars = {
-        key: value
-        for key, value in os.environ.items()
-        if key.startswith("STORAGE_URI_")
+# ── Fill these from your AI Core Service Key ──────────────────
+CLIENT_ID       = "sb-524de71c-6fdc-42f9-9ca3-1aa049f9521f!b37640|xsuaa_std!b15301"
+CLIENT_SECRET   = "56e3a705-fe31-4cd8-adab-b9b49790abbe$VkGaPU4HAATczI9yH00PmPRSFS4QU-dJCJw9XzuED8o="
+AUTH_URL        = "https://fin-analytical-svc-rnd.authentication.ap11.hana.ondemand.com"
+DEPLOYMENT_URL  = "https://api.ai.prod-ap11.ap-southeast-1.aws.ml.hana.ondemand.com/v2/inference/deployments/d3f04003b44b8c19"   # from AI Launchpad
+RESOURCE_GROUP  = "default"                       # your resource group name
+# ─────────────────────────────────────────────────────────────
+# Step 1: Get Bearer Token
+def get_token():
+    response = requests.post(
+        url=f"{AUTH_URL}/oauth/token",
+        data={
+            "grant_type"   : "client_credentials",
+            "client_id"    : CLIENT_ID,
+            "client_secret": CLIENT_SECRET
+        }
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+# Step 2: Call Health Endpoint
+def call_health_api(token):
+    headers = {
+        "Authorization"    : f"Bearer {token}",
+        "AI-Resource-Group": RESOURCE_GROUP,
+        "Content-Type"     : "application/json"
     }
+    body = {"TEXT_COL":"TEXT(S4Journal)","LABEL_COL":"taxcategory","CONSIDER_CLASS_TARGET_COL":["Deductible","Non-deductible"],"OW_RL_FM_PROFIT_CENTRE":"301537","OW_RL_FM_OPER_UNIT":"800","OW_RL_FM_SEGMENT":"4098","OW_RL_FM_TEXT_CHATFIELD_COL":["lb","non-lb","goodwill","opt loss","cems","incident recovery","refund"],"OW_OUTPUT_FM_TEXT_CHATFIELD_COL":"Non-deductible","OW_RL_FM_TEXT_CHATFIELD_COL_CND_TH_AMT":["goodwill","cems","refund"],"OW_OUTPUT_FM_TEXT_CHATFIELD_COL_CND_TH_AMT":"Deductible","THRESHOLD_GROUPBY":["GLAccount","OperatingLocation","ProfitCenter","TEXT(S4Journal)"],"THRESHOLD_SUMBY":"Amount(Base)","THRESHOLD_AMOUNT":"50000","NET_OFF_GROUPBY":["GLAccount","OperatingLocation","ProfitCenter","TEXT(S4Journal)"],"AMOUNT_COL":"Amount(Base)","KEY_COLS":["ExpenseType"],"Acct_filter_type":"Provisions and Payments of Operating Losses (B/S),Provisions and Payments of Operating Losses (P/L)","market":"Hong_Kong"}
+    response = requests.post(
+        url=f"{DEPLOYMENT_URL}/v1/process",
+        headers=headers,
+        json=body
+    )
+    print(f"Status Code : {response.status_code}")
+    print(f"Response    : {response.text}") 
+    response.raise_for_status()
+    return response.json()
 
-    if not storage_vars:
-        print("ℹ️ No STORAGE_URI_* vars found. Only primary market will be loaded.")
-        return
+# Main
+if __name__ == "__main__":
+    print("Getting token...")
+    token = get_token()
+    print("Token retrieved ✅")
 
-    # SAP AI Core injects S3 credentials automatically via env vars:
-    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, AWS_S3_ENDPOINT_URL
-    s3_endpoint = os.environ.get("AWS_S3_ENDPOINT_URL") or os.environ.get("S3_ENDPOINT")
-    s3_client   = boto3.client("s3", endpoint_url=s3_endpoint)
+    print("\nCalling Health API...")
+    result = call_health_api(token)
+    print("Response ✅ :", result)
 
-    for env_key, uri in storage_vars.items():
-        # STORAGE_URI_HONG_KONG → "Hong_Kong"
-        market_folder = env_key.replace("STORAGE_URI_", "").replace("_", " ").title().replace(" ", "_")
-        dest          = os.path.join("/tmp/models", market_folder)
-        os.makedirs(dest, exist_ok=True)
-        print(f"📥 Downloading [{market_folder}] from {uri} → {dest}")
 
-        # Parse bucket and prefix from s3://bucket/prefix
-        match = re.match(r"s3://([^/]+)/(.+)", uri)
-        if not match:
-            raise ValueError(f"Cannot parse S3 URI: {uri}")
-        bucket = match.group(1)
-        prefix = match.group(2)
+user: projects $ /home/user/.asdf-inst/shims/python3.13 "/home/user/projects/scallPY copy 2.py"
+Getting token...
+Token retrieved ✅
 
-        # Download all files under this prefix
-        paginator = s3_client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                key      = obj["Key"]
-                filename = os.path.basename(key)
-                if not filename:
-                    continue
-                local_path = os.path.join(dest, filename)
-                print(f"  ↓ {filename} → {local_path}")
-                s3_client.download_file(bucket, key, local_path)
+Calling Health API...
+Status Code : 500
+Response    : <!doctype html>
+<html lang=en>
+<title>500 Internal Server Error</title>
+<h1>Internal Server Error</h1>
+<p>The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.</p>
 
-        print(f"✅ [{market_folder}] downloaded successfully.")
+Traceback (most recent call last):
+  File "/home/user/projects/scallPY copy 2.py", line 48, in <module>
+    result = call_health_api(token)
+  File "/home/user/projects/scallPY copy 2.py", line 38, in call_health_api
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/user/.asdf-inst/installs/python/3.13.1/lib/python3.13/site-packages/requests/models.py", line 1028, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 500 Server Error: Internal Server Error for url: https://api.ai.prod-ap11.ap-southeast-1.aws.ml.hana.ondemand.com/v2/inference/deployments/d3f04003b44b8c19/v1/process
+user: projects $ 
