@@ -1,18 +1,49 @@
-user: projects $ /home/user/.asdf-inst/shims/python3.13 "/home/user/projects/scallPY copy.py"
-Getting token...
-Token retrieved ✅
+apiVersion: ai.sap.com/v1alpha1
+kind: ServingTemplate
+metadata:
+  name: naive-bayes-prediction-v3
+  annotations:
+    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v3 multi-market"
+    scenarios.ai.sap.com/name: "naive-bayes-v3"
+    executables.ai.sap.com/description: "naive-bayes prediction-v3"
+    executables.ai.sap.com/name: "naive-bayes-prediction-v3"
+  labels:
+    scenarios.ai.sap.com/id: "naive-bayes-v3"
+    ai.sap.com/version: "1.0.0"
+spec:
+  inputs:
+    artifacts:
+      - name: multinomialNB_HongKong
 
-Calling Health API...
-Status Code : 500
-Response    : {"message":"\u274c Market 'Hong Kong' not found. Available markets: ['1']","status":"error","traceback":"Traceback (most recent call last):\n  File \"/app/app.py\", line 690, in process\n    result = process_data(config_params=config_params, market=market)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/app.py\", line 240, in process_data\n    raise ValueError(f\"\u274c Market '{market}' not found. Available markets: {available}\")\nValueError: \u274c Market 'Hong Kong' not found. Available markets: ['1']\n"}
-
-Traceback (most recent call last):
-  File "/home/user/projects/scallPY copy.py", line 48, in <module>
-    result = call_health_api(token)
-  File "/home/user/projects/scallPY copy.py", line 38, in call_health_api
-    response.raise_for_status()
-    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "/home/user/.asdf-inst/installs/python/3.13.1/lib/python3.13/site-packages/requests/models.py", line 1028, in raise_for_status
-    raise HTTPError(http_error_msg, response=self)
-requests.exceptions.HTTPError: 500 Server Error: Internal Server Error for url: https://api.ai.prod-ap11.ap-southeast-1.aws.ml.hana.ondemand.com/v2/inference/deployments/da768de0f3df1dcd/v1/process
-user: projects $ 
+  template:
+    apiVersion: "serving.kserve.io/v1beta1"
+    metadata:
+      annotations: "{}"
+      labels: "{\"ai.sap.com/resourcePlan\": \"starter\"}"
+    spec: |
+      predictor:
+        minReplicas: 1
+        maxReplicas: 2
+        containers:
+          - name: kserve-container
+            image: docker.io/rahulcruze786/ml_prediction:v1.9
+            ports:
+              - containerPort: 8080
+                protocol: TCP
+            command: ["python", "app.py"]
+            env:
+              - name: STORAGE_URI
+                value: "{{inputs.artifacts.multinomialNB_HongKong}}"
+              - name: MODEL_PATH
+                value: "/mnt/models"
+              -name: PRIMARY_MARKET
+                value: "Hong_Kong"
+            resources:
+              requests:
+                cpu: "0.5"
+                memory: "512Mi"
+              limits:
+                cpu: "1"
+                memory: "1Gi"
+	
+error when patching "/dev/shm/27298992": admission webhook "servingtemplatevalidator.ai.sap.com" denied the request: v1alpha1.ai.sap.com "naive-bayes-prediction-v3" is invalid: spec.template: Invalid value: "predictor:\n minReplicas: 1\n maxReplicas: 2\n containers:\n - name: kserve-container\n image: docker.io/rahulcruze786/ml_prediction:v1.9\n ports:\n - containerPort: 8080\n protocol: TCP\n command: [\"python\", \"app.py\"]\n env:\n - name: STORAGE_URI\n value: \"{{inputs.artifacts.multinomialNB_HongKong}}\"\n - name: MODEL_PATH\n value: \"/mnt/models\"\n -name: PRIMARY_MARKET\n value: \"Hong_Kong\"\n resources:\n requests:\n cpu: \"0.5\"\n memory: \"512Mi\"\n limits:\n cpu: \"1\"\n memory: \"1Gi\"\n": error converting to yaml, yaml: line 15: did not find expected '-' indicator
