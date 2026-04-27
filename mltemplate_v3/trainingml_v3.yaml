@@ -45,4 +45,4 @@ spec:
       - name: market
         value: "Hong Kong" 
       - name: artifactName
-        value: "multinomialNB_Singapore"
+        value: "multinomialNB_HongKong"
