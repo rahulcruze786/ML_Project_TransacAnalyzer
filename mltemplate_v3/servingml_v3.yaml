@@ -1,14 +1,14 @@
 apiVersion: ai.sap.com/v1alpha1
 kind: ServingTemplate
 metadata:
-  name: naive-bayes-prediction-v3
+  name: naive-bayes-prediction-sg-hk
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v3 multi-market"
-    scenarios.ai.sap.com/name: "naive-bayes-v3"
-    executables.ai.sap.com/description: "naive-bayes prediction-v3"
-    executables.ai.sap.com/name: "naive-bayes-prediction-v3"
+    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-sg-hk multi-market"
+    scenarios.ai.sap.com/name: "naive-bayes-sg-hk"
+    executables.ai.sap.com/description: "naive-bayes prediction-sg-hk"
+    executables.ai.sap.com/name: "naive-bayes-prediction-sg-hk"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes-v3"
+    scenarios.ai.sap.com/id: "naive-bayes-sg-hk"
     ai.sap.com/version: "1.0.0"
 spec:
   inputs:
