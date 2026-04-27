@@ -43,6 +43,6 @@ spec:
   arguments:
     parameters:
       - name: market
-        value: "Hong Kong" 
+        value: "Singapore" 
       - name: artifactName
         value: "multinomialNB_Singapore"
