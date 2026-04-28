@@ -1,1 +1,78 @@
-{"value":[{"timestamp":"2026-04-27T21:00:33.731778478+00:00","msg":"Error processing line 1 of /usr/lib/python3.12/site-packages/distutils-precedence.pth:","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:33.731848750+00:00","msg":"","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:33.744049187+00:00","msg":"    File \"<string>\", line 1, in <module>","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:33.744051366+00:00","msg":"  ModuleNotFoundError: No module named '_distutils_hack'","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:33.744053407+00:00","msg":"","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:33.744056648+00:00","msg":"Remainder of file ignored","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:33.744034913+00:00","msg":"  Traceback (most recent call last):","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:33.744046227+00:00","msg":"    File \"<frozen site>\", line 206, in addpackage","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:35.359162086+00:00","msg":"/usr/local/lib/python3.12/site-packages/google/cloud/storage/_http.py:19: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:35.359186497+00:00","msg":"  import pkg_resources","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:35.442539860+00:00","msg":"INFO:root:Initializing, args: src_uri [s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e79ea190ffa10f2a/multinomialNB_HongKong] dest_path[ [/mnt/models]","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:35.442563224+00:00","msg":"INFO:root:Copying contents of s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e79ea190ffa10f2a/multinomialNB_HongKong to local","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:35.476138484+00:00","msg":"INFO:botocore.credentials:Found credentials in environment variables.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:35.609630870+00:00","msg":"INFO:botocore.configprovider:Found endpoint for s3 via: environment_global.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:36.453099712+00:00","msg":"INFO:root:Successfully copied s3://hcp-4bf99a2c-376e-4f6b-b787-32d388b846de/ai/default/e79ea190ffa10f2a/multinomialNB_HongKong to /mnt/models","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:36.453116460+00:00","msg":"INFO:root:Model downloaded in 1.0108357090002755 seconds.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"storage-initializer"},{"timestamp":"2026-04-27T21:00:41.060279601+00:00","msg":" * Serving Flask app 'app'","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:00:41.060319513+00:00","msg":" * Debug mode: off","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:00:41.067346254+00:00","msg":"\u001b[33mPress CTRL+C to quit\u001b[0m","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:00:41.067248709+00:00","msg":"\u001b[31m\u001b[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\u001b[0m","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:00:41.067265556+00:00","msg":" * Running on all addresses (0.0.0.0)","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:00:41.067268799+00:00","msg":" * Running on http://127.0.0.1:8080","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:00:41.067271531+00:00","msg":" * Running on http://100.64.180.24:8080","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:13.173771243+00:00","msg":"  df = pd.read_sql(query, conn)","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:13.173081479+00:00","msg":"/app/shared/hdi_data.py:36: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:13.179535409+00:00","msg":"/app/shared/hdi_data.py:36: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:13.179555313+00:00","msg":"  df = pd.read_sql(query, conn)","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:13.315064218+00:00","msg":"/app/shared/hdi_data.py:36: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:13.315103935+00:00","msg":"  df = pd.read_sql(query, conn)","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:15.341496883+00:00","msg":"/app/app.py:415: FutureWarning: DataFrameGroupBy.apply operated on the grouping columns. This behavior is deprecated, and in a future version of pandas the grouping columns will be excluded from the operation. Either pass `include_groups=False` to exclude the groupings or explicitly select the grouping columns after groupby to silence this warning.","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:15.341535818+00:00","msg":"  data_no_netoff = grouped.apply(assign_net_off)","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"},{"timestamp":"2026-04-27T21:02:23.478435914+00:00","msg":"127.0.0.1 - - [27/Apr/2026 21:02:23] \"POST /v1/process HTTP/1.1\" 200 -","pod":"db619432f0ca0e50-predictor-00001-deployment-567946b7dd-28rdl","container":"kserve-container"}]}
+I can see you're on the **Add Object Store Secret** screen — but this is the wrong place. This is for object store secrets (for training artifact storage), not for Kubernetes secrets.
+
+---
+
+## Kubernetes secrets are created differently in SAP AI Core
+
+You cannot create them via AI Launchpad UI directly. You need to use the **SAP AI Core API**.
+
+---
+
+## Create the secret via API call
+
+Run this from your SAP BAS terminal:
+
+### Step 1 — Get your token first
+```python
+import requests
+
+CLIENT_ID     = "sb-524de71c-6fdc-42f9-9ca3-1aa049f9521f!b37640|xsuaa_std!b15301"
+CLIENT_SECRET = "56e3a705-fe31-4cd8-adab-b9b49790abbe$VkGaPU4HAATczI9yH00PmPRSFS4QU-dJCJw9XzuED8o="
+AUTH_URL      = "https://fin-analytical-svc-rnd.authentication.ap11.hana.ondemand.com"
+
+response = requests.post(
+    url=f"{AUTH_URL}/oauth/token",
+    data={
+        "grant_type":    "client_credentials",
+        "client_id":     CLIENT_ID,
+        "client_secret": CLIENT_SECRET
+    }
+)
+token = response.json()["access_token"]
+print("Token retrieved ✅")
+```
+
+### Step 2 — Create the Kubernetes secret
+```python
+import base64
+
+AI_CORE_API   = "https://api.ai.prod-ap11.ap-southeast-1.aws.ml.hana.ondemand.com"
+RESOURCE_GROUP = "default"
+
+def b64(value):
+    return base64.b64encode(value.encode()).decode()
+
+headers = {
+    "Authorization":     f"Bearer {token}",
+    "AI-Resource-Group": RESOURCE_GROUP,
+    "Content-Type":      "application/json"
+}
+
+secret_payload = {
+    "name": "s3-credentials",
+    "data": {
+        "AWS_ACCESS_KEY_ID":     b64("AKIAQAB2LD3UVWNB5D3E"),
+        "AWS_SECRET_ACCESS_KEY": b64("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"),
+        "AWS_S3_ENDPOINT_URL":   b64("https://s3-ap-southeast-1.amazonaws.com")
+    }
+}
+
+response = requests.post(
+    url=f"{AI_CORE_API}/v2/admin/secrets",
+    headers=headers,
+    json=secret_payload
+)
+print(f"Status : {response.status_code}")
+print(f"Response: {response.text}")
+```
+
+---
+
+## Expected response
+```json
+{"message": "secret s3-credentials created"}
+```
+
+Once created, the secret `s3-credentials` is available in your `default` resource group and the serving YAML can reference it via `secretKeyRef`.
+
+Run both steps in your SAP BAS terminal and share the response.
