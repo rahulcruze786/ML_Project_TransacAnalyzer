@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: naive-bayes-training-v
+  name: naive-bayes-training-v6
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-v"
-    scenarios.ai.sap.com/name: "naive-bayes-v"
-    executables.ai.sap.com/description: "naive-bayes model-v"
-    executables.ai.sap.com/name: "naive-bayes-training-v"
+    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-v6"
+    scenarios.ai.sap.com/name: "naive-bayes-v6"
+    executables.ai.sap.com/description: "naive-bayes model-v6"
+    executables.ai.sap.com/name: "naive-bayes-training-v6"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes-v"
+    scenarios.ai.sap.com/id: "naive-bayes-v6"
     ai.sap.com/version: "1.0.0"
 spec:
   entrypoint: training-pipeline
@@ -23,7 +23,7 @@ spec:
         labels:
           ai.sap.com/resourcePlan: starter
       container:
-        image: docker.io/rahulcruze786/ml_training_model:v1.7
+        image: docker.io/rahulcruze786/ml_training_model:v1.11
         command: ["python"]
         args:
           - "trainer.py"
@@ -33,7 +33,7 @@ spec:
       outputs:
         artifacts:
           - name: model-output
-            globalName: multinomialNB
+            globalName: ALL_MARKET_NB_MODEL
             path: /tmp/models          # ← only output models here
             archive:
               none: {}
