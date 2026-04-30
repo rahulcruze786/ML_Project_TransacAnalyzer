@@ -1,10 +1,49 @@
-config_path = os.path.join(model_dir, CONFIG_FILENAME)
-with open(config_path, "w", encoding="utf-8") as f:
-    json.dump(metadata, f, indent=2)
+import requests
 
-# TEMP: duplicate config for Singapore
-sg_metadata = {**metadata, "market": "Singapore"}
-sg_metadata["models"] = {k: {**v, "model_file": f"model_Singapore_{v['model_file'][len('model_'):]}"} for k, v in metadata["models"].items()}
-with open(os.path.join(model_dir, "model_config_Singapore.json"), "w", encoding="utf-8") as f:
-    json.dump(sg_metadata, f, indent=2)
-# END TEMP
+# ── Fill these from your AI Core Service Key ──────────────────
+CLIENT_ID       = "sb-524de71c-6fdc-42f9-9ca3-1aa049f9521f!b37640|xsuaa_std!b15301"
+CLIENT_SECRET   = "56e3a705-fe31-4cd8-adab-b9b49790abbe$VkGaPU4HAATczI9yH00PmPRSFS4QU-dJCJw9XzuED8o="
+AUTH_URL        = "https://fin-analytical-svc-rnd.authentication.ap11.hana.ondemand.com"
+DEPLOYMENT_URL  = "https://api.ai.prod-ap11.ap-southeast-1.aws.ml.hana.ondemand.com/v2/inference/deployments/dda72042ac4faf1a"   # from AI Launchpad
+RESOURCE_GROUP  = "default"                       # your resource group name
+# ─────────────────────────────────────────────────────────────
+# Step 1: Get Bearer Token
+def get_token():
+    response = requests.post(
+        url=f"{AUTH_URL}/oauth/token",
+        data={
+            "grant_type"   : "client_credentials",
+            "client_id"    : CLIENT_ID,
+            "client_secret": CLIENT_SECRET
+        }
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+# Step 2: Call Health Endpoint
+def call_health_api(token):
+    headers = {
+        "Authorization"    : f"Bearer {token}",
+        "AI-Resource-Group": RESOURCE_GROUP,
+        "Content-Type"     : "application/json"
+    }
+    body = {"TEXT_COL":"TEXT(S4Journal)","LABEL_COL":"taxcategory","CONSIDER_CLASS_TARGET_COL":["Deductible","Non-deductible"],"OW_RL_FM_PROFIT_CENTRE":"301537","OW_RL_FM_OPER_UNIT":"800","OW_RL_FM_SEGMENT":"4098","OW_RL_FM_TEXT_CHATFIELD_COL":["lb","non-lb","goodwill","opt loss","cems","incident recovery","refund"],"OW_OUTPUT_FM_TEXT_CHATFIELD_COL":"Non-deductible","OW_RL_FM_TEXT_CHATFIELD_COL_CND_TH_AMT":["goodwill","cems","refund"],"OW_OUTPUT_FM_TEXT_CHATFIELD_COL_CND_TH_AMT":"Deductible","THRESHOLD_GROUPBY":["GLAccount","OperatingLocation","ProfitCenter","TEXT(S4Journal)"],"THRESHOLD_SUMBY":"Amount(Base)","THRESHOLD_AMOUNT":"50000","NET_OFF_GROUPBY":["GLAccount","OperatingLocation","ProfitCenter","TEXT(S4Journal)"],"AMOUNT_COL":"Amount(Base)","KEY_COLS":["ExpenseType"],"Acct_filter_type":"Provisions and Payments of Operating Losses (B/S),Provisions and Payments of Operating Losses (P/L)","market":"Honk Kong"}
+    response = requests.post(
+        url=f"{DEPLOYMENT_URL}/v1/process",
+        headers=headers,
+        json=body
+    )
+    print(f"Status Code : {response.status_code}")
+    print(f"Response    : {response.text}") 
+    response.raise_for_status()
+    return response.json()
+
+# Main
+if __name__ == "__main__":
+    print("Getting token...")
+    token = get_token()
+    print("Token retrieved ✅")
+
+    print("\nCalling Health API...")
+    result = call_health_api(token)
+    print("Response ✅ :", result)
