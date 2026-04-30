@@ -26,7 +26,7 @@ spec:
         image: docker.io/rahulcruze786/ml_training_model:v1.11
         command: ["python"]
         args:
-          - "trainer.py"
+          - "metrics.py"
         env:
           - name: MODEL_DIR
             value: "/tmp/models"
