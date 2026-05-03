@@ -1,9 +1,8 @@
-```python
 # ── Flask and web framework imports ──────────────────────────────────────────
 from flask import Flask, jsonify, request, send_from_directory
-# Flask          → creates the web application (the server itself)
-# jsonify        → converts Python dict → JSON response to send back to UI
-# request        → gives access to incoming HTTP request (body, params, headers)
+# Flask               → creates the web application (the server itself)
+# jsonify             → converts Python dict → JSON response to send back to UI
+# request             → gives access to incoming HTTP request (body, params, headers)
 # send_from_directory → serves static files (HTML, CSS, JS) from a folder
 
 from flask_cors import CORS
@@ -17,6 +16,10 @@ import traceback
 import os
 # os → reads environment variables (like PORT) and builds file paths
 
+import pandas as pd
+# pandas → used in get_config(), get_account_mapping() and process()
+# for converting list of dicts → DataFrame and filtering rows
+
 # ── Import ML logic from separate files ──────────────────────────────────────
 from pipeline import process_data
 # process_data() lives in pipeline.py — contains the full ML prediction logic
@@ -26,6 +29,7 @@ from model_loader import load_metadata
 # load_metadata() lives in model_loader.py — reads model_config_{market}.json
 # imported here for the /v1/getMetadata route only
 
+
 # ── Create the Flask application ─────────────────────────────────────────────
 app = Flask(__name__, static_folder="webapp", static_url_path="")
 # Flask(__name__)     → creates the app, __name__ tells Flask which module it is
@@ -34,7 +38,7 @@ app = Flask(__name__, static_folder="webapp", static_url_path="")
 
 CORS(app)
 # enables CORS for ALL routes in this app
-# without this, the React/HTML UI cannot call the API from a browser
+# without this, the React/HTML UI cannot call this API from a browser
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -42,251 +46,26 @@ CORS(app)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/')
-# @app.route('/') → registers this function to handle GET requests to "/"
-# when user visits the root URL, Flask calls root() below
+# registers this function to handle GET requests to root URL "/"
+# when user visits the app URL, Flask calls root() and loads the UI
 def root():
-    # send_from_directory → reads index.html from the webapp folder and sends it
-    # this loads the React/HTML frontend in the browser
+    # reads index.html from the webapp folder and sends it to the browser
     return send_from_directory(app.static_folder, 'index.html')
 
 
 @app.route('/<path:filename>')
-# <path:filename> → a URL variable that captures everything after "/"
+# <path:filename> → URL variable that captures everything after "/"
 # e.g. "/static/main.js" → filename = "static/main.js"
 # handles all static asset requests (CSS, JS, images) that the UI needs
 def serve_static(filename):
-    # serves the requested file from the webapp folder
     return send_from_directory(app.static_folder, filename)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /v1/health
-# Simple liveness check — used by SAP AI Core / load balancer to confirm
-# the container is running and healthy. Returns immediately with no logic.
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/health')
-def health():
-    # jsonify() converts the Python dict → JSON string
-    # Flask automatically sets Content-Type: application/json in the response
-    return jsonify({"status": "healthyUI"})
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /v1/getMetadata?market=Hong+Kong
-# Returns the model_config_{market}.json file contents as JSON.
-# Still reads from disk (/mnt/models/) — no UI data needed here.
-# market is passed as a URL query parameter e.g. ?market=Hong Kong
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/getMetadata', methods=['GET'])
-def get_metadata():
-    try:
-        # request.args → dict of URL query parameters (everything after ?)
-        # .get('market') → safely returns None if ?market= is not in the URL
-        market = request.args.get('market')
-
-        # if market is missing, return 400 Bad Request immediately
-        # 400 means "the client sent a bad/incomplete request"
-        if not market:
-            return jsonify({"status": "error", "message": "'market' param is required"}), 400
-
-        # load_metadata() reads model_config_{market}.json from /mnt/models/
-        # returns a Python dict — NOT JSON yet at this point
-        metadata = load_metadata(market)
-
-        # jsonify() converts the Python dict → JSON response
-        # 200 OK is the default status code (no need to specify)
-        return jsonify({"status": "success", "data": metadata})
-
-    except FileNotFoundError as e:
-        # raised by load_metadata() if the config file doesn't exist for this market
-        # 404 = "resource not found" — correct status for a missing file
-        return jsonify({"status": "error", "message": str(e)}), 404
-
-    except Exception as e:
-        # catches any other unexpected error
-        # str(e) converts the exception object → readable error message string
-        # 500 = "internal server error"
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /v1/getConfig
-# Receives config data from the UI, filters it by market and processtype,
-# and returns the filtered rows as JSON.
-# Previously read from HDI Configuration table — now UI sends the data.
-#
-# Expected request body (JSON):
-# {
-#   "market":      "Hong Kong",         ← optional filter
-#   "processtype": "TRAVEL",            ← optional filter
-#   "config": [                         ← required: list of config rows
-#       { "Market": "Hong Kong", "ProcessType": "TRAVEL",
-#         "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" },
-#       ...
-#   ]
-# }
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/getConfig', methods=['POST'])
-def get_config():
-    try:
-        # pandas is imported here (inside the function) rather than at the top
-        # because only this route needs it — keeps top-level imports clean
-        import pandas as pd
-
-        # request.get_json(silent=True) → parses the JSON request body
-        # into a Python dict. silent=True means if the body is missing
-        # or invalid JSON, it returns None instead of raising an exception
-        payload = request.get_json(silent=True)
-
-        # if payload is None (missing or broken JSON body) → return 400 error
-        if not payload:
-            return jsonify({"status": "error", "message": "Missing JSON body"}), 400
-
-        # extract optional filter values from the payload dict
-        # .get() safely returns None if the key doesn't exist — no KeyError
-        market       = payload.get('market')       # e.g. "Hong Kong" or None
-        process_type = payload.get('processtype')  # e.g. "TRAVEL" or None
-
-        # extract the config data list — default to [] if key is missing
-        config_data = payload.get('config', [])
-
-        # if no config data was sent, return 400 — nothing to filter
-        if not config_data:
-            return jsonify({"status": "error", "message": "'config' list is required"}), 400
-
-        # convert list of dicts → pandas DataFrame for filtering
-        # e.g. [{"Market":"HK","Parameter":"X","Value":"50000"}] → DataFrame
-        config_df = pd.DataFrame(config_data)
-
-        # filter by market only if:
-        # 1. market was provided in the request (not None)
-        # 2. the DataFrame actually has a "Market" column
-        # config_df['Market'] == market → creates a True/False column per row
-        # config_df[...] keeps only the True rows
-        if market and 'Market' in config_df.columns:
-            config_df = config_df[config_df['Market'] == market]
-
-        # filter by process_type only if:
-        # 1. processtype was provided in the request
-        # 2. the DataFrame actually has a "ProcessType" column
-        # applied on already-market-filtered DataFrame → cumulative AND filter
-        if process_type and 'ProcessType' in config_df.columns:
-            config_df = config_df[config_df['ProcessType'] == process_type]
-
-        # to_dict(orient='records') → converts filtered DataFrame back to
-        # list of dicts: [{"Market":"HK","Parameter":"X","Value":"50000"}, ...]
-        # jsonify() wraps it in a JSON response
-        return jsonify({"status": "success", "data": config_df.to_dict(orient='records')})
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /v1/getAccountMapping
-# Receives account mapping data from UI, filters by market and processtype,
-# returns filtered rows as JSON.
-# Previously read from HDI Accountaxcode table — now UI sends the data.
-#
-# Expected request body (JSON):
-# {
-#   "market":          "Hong Kong",      ← optional filter
-#   "processtype":     "TRAVEL,MEALS",   ← optional filter, comma-separated
-#   "account_mapping": [                 ← required: list of mapping rows
-#       { "Account": "12345", "ExpenseType": "TRAVEL",
-#         "ProcessType": "TRAVEL", "Market": "Hong Kong" },
-#       ...
-#   ]
-# }
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/getAccountMapping', methods=['POST'])
-def get_account_mapping():
-    try:
-        import pandas as pd
-
-        payload = request.get_json(silent=True)
-        if not payload:
-            return jsonify({"status": "error", "message": "Missing JSON body"}), 400
-
-        market           = payload.get('market')
-        process_type     = payload.get('processtype')
-        account_map_data = payload.get('account_mapping', [])
-
-        if not account_map_data:
-            return jsonify({"status": "error", "message": "'account_mapping' list is required"}), 400
-
-        # convert list of account mapping dicts → DataFrame for filtering
-        mapping_df = pd.DataFrame(account_map_data)
-
-        # filter by market if provided and column exists
-        if market and 'Market' in mapping_df.columns:
-            mapping_df = mapping_df[mapping_df['Market'] == market]
-
-        # process_type can be comma-separated e.g. "TRAVEL,MEALS"
-        # split(",") → ["TRAVEL", "MEALS"]
-        # .strip() removes any accidental spaces around each value
-        # .isin([...]) keeps rows where ProcessType matches ANY value in the list
-        if process_type and 'ProcessType' in mapping_df.columns:
-            pts        = [pt.strip() for pt in process_type.split(',')]
-            mapping_df = mapping_df[mapping_df['ProcessType'].isin(pts)]
-
-        return jsonify({"status": "success", "data": mapping_df.to_dict(orient='records')})
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /v1/process
-# Main prediction pipeline trigger.
-# UI sends all data (journal lines, account mapping, config params).
-# Calls process_data() in pipeline.py and returns prediction results as JSON.
-#
-# Expected request body (JSON):
-# {
-#   "market":          "Hong Kong",
-#   "journal_lines":   [ { ...one row per journal entry... } ],
-#   "account_mapping": [ { "Account": "12345", "ExpenseType": "TRAVEL", ... } ],
-#   "config_params":   { "THRESHOLD_AMOUNT": "50000", ... }
-# }
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/process', methods=['POST'])
-def process():
-    try:
-        payload = request.get_json(silent=True)
-
-        # if request body is missing or not valid JSON → return 400
-        if not payload:
-            return jsonify({"status": "error", "message": "Missing JSON body"}), 400
-
-        # pass the entire payload dict directly to process_data() in pipeline.py
-        # process_data() handles all ML logic — this route only handles HTTP
-        # result is already a dict: { status, message, rows_processed, data }
-        result = process_data(payload)
-
-        # jsonify() converts the result dict → JSON HTTP response
-        return jsonify(result)
-
-    except Exception as e:
-        # traceback.format_exc() → full stack trace as a string
-        # included in the error response so developers can debug easily
-        return jsonify({
-            "status":    "error",
-            "message":   str(e),
-            "traceback": traceback.format_exc()
-        }), 500
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: _validate_primary_keys(records)
 # Checks that every record in a list contains all required primary key fields.
 # Used by OverwritePrediction and OverwriteReview — both need the same check.
-# Extracted into one function to avoid repeating the same logic twice.
+# Extracted into one helper to avoid repeating the same logic twice.
 #
 # Returns a list of missing key details — empty list means all keys present.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -299,24 +78,337 @@ def _validate_primary_keys(records):
         "PostingItem", "Ledger", "Entity/BU", "SourceDocumentNo"
     ]
 
-    # list comprehension that builds a list of missing key details
-    # loops over every record (i = index, rec = the dict)
-    # for each record, loops over every required primary key
-    # if the key is NOT in the record dict → add it to missing list
+    # loop over every record and every required key
+    # if a key is missing in a record → add it to the missing list
     # result: [ {"index": 0, "missing_key": "Ledger"}, ... ] or [] if all present
     missing = [
         {"index": i, "missing_key": pk}
-        for i, rec in enumerate(records)   # i=0,1,2...  rec={...dict...}
-        for pk in primary_keys             # pk="MTDPeriod", "DocumentNumber"...
+        for i, rec in enumerate(records)   # i = row number, rec = the dict
+        for pk in primary_keys             # pk = each required key name
         if pk not in rec                   # only include if key is missing
     ]
     return missing
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# GET /v1/health
+# Simple liveness check — used by SAP AI Core / load balancer to confirm
+# the container is running. Returns immediately with no logic.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/v1/health')
+def health():
+    return jsonify({"status": "healthyUI"})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /v1/getMetadata?market=Hong+Kong
+# Returns model_config_{market}.json contents as JSON.
+# Still reads from disk (/mnt/models/) — no UI data needed here.
+# market is passed as a URL query parameter e.g. ?market=Hong Kong
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/v1/getMetadata', methods=['GET'])
+def get_metadata():
+    try:
+        # request.args → dict of URL query parameters (everything after ?)
+        # .get('market') → safely returns None if ?market= is not in the URL
+        market = request.args.get('market')
+
+        # market is required — without it we don't know which config file to load
+        if not market:
+            return jsonify({"status": "error", "message": "'market' param is required"}), 400
+
+        # load_metadata() reads model_config_{market}.json from /mnt/models/
+        # returns a Python dict — becomes JSON only when jsonify() is called
+        metadata = load_metadata(market)
+
+        return jsonify({"status": "success", "data": metadata})
+
+    except FileNotFoundError as e:
+        # raised by load_metadata() if config file doesn't exist for this market
+        # 404 = resource not found
+        return jsonify({"status": "error", "message": str(e)}), 404
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /v1/getConfig
+# Receives the full config table from UI, filters by market and processtype,
+# returns filtered rows as JSON.
+# Previously read from HDI Configuration table — now UI sends the data.
+#
+# Expected request body (JSON):
+# {
+#   "market":      "Hong Kong",              ← REQUIRED: string
+#   "processtype": ["TRAVEL", "MEALS"],      ← REQUIRED: list (UI always sends list)
+#   "config": [                              ← REQUIRED: config table rows
+#       { "Market": "Hong Kong", "ProcessType": "TRAVEL",
+#         "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" },
+#       { "Market": "Hong Kong",
+#         "Parameter": "OW_RL_FM_PROFIT_CENTRE", "Value": "1234" }
+#   ]
+# }
+#
+# Note: ProcessType column may not exist in every config row — handled safely.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/v1/getConfig', methods=['POST'])
+def get_config():
+    try:
+        # request.get_json(silent=True) → parses JSON body → Python dict
+        # silent=True → returns None instead of raising error if body is invalid
+        payload = request.get_json(silent=True)
+        if not payload:
+            return jsonify({"status": "error", "message": "Missing JSON body"}), 400
+
+        # ── Step 1: Extract and validate market ───────────────────────────────
+        market = payload.get('market')
+        if not market:
+            return jsonify({"status": "error", "message": "'market' is required"}), 400
+
+        # ── Step 2: Extract and validate processtype ──────────────────────────
+        # UI always sends processtype as a list e.g. ["TRAVEL", "MEALS"]
+        # no conversion needed — just validate it is a non-empty list
+        process_type = payload.get('processtype')
+        if not isinstance(process_type, list) or not process_type:
+            return jsonify({"status": "error",
+                            "message": "'processtype' must be a non-empty list e.g. ['TRAVEL','MEALS']"}), 400
+
+        print(f"📋 market        : {market}")
+        print(f"📋 process_types : {process_type}")
+
+        # ── Step 3: Extract and validate config data ──────────────────────────
+        # "config" is the full Configuration table rows sent from the UI
+        config_data = payload.get('config', [])
+        if not config_data:
+            return jsonify({"status": "error", "message": "'config' list is required"}), 400
+
+        # convert list of dicts → DataFrame for easy filtering
+        config_df = pd.DataFrame(config_data)
+
+        # ── Step 4: Filter by market — always required ────────────────────────
+        if 'Market' not in config_df.columns:
+            return jsonify({"status": "error",
+                            "message": "'Market' column missing in config data"}), 400
+
+        # keep only rows where Market matches the requested market
+        config_df = config_df[config_df['Market'] == market]
+        print(f"📋 rows after market filter    : {len(config_df)}")
+
+        # ── Step 5: Filter by processtype — column might NOT exist ────────────
+        # some config rows may not have ProcessType (global params for all types)
+        # only filter if the column exists — otherwise return all market rows
+        if 'ProcessType' in config_df.columns:
+            # .isin(process_type) → keeps rows where ProcessType matches
+            # ANY value in the list
+            # e.g. ["TRAVEL","MEALS"] keeps rows where ProcessType is TRAVEL OR MEALS
+            config_df = config_df[config_df['ProcessType'].isin(process_type)]
+            print(f"📋 rows after processtype filter: {len(config_df)}")
+        else:
+            print(f"⚠️ 'ProcessType' column not found — skipping processtype filter")
+
+        # to_dict(orient='records') → DataFrame → list of dicts
+        # one dict per row — natural format for UI to consume
+        return jsonify({"status": "success", "data": config_df.to_dict(orient='records')})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /v1/getAccountMapping
+# Receives full account mapping table from UI, filters by market
+# and processtype, returns filtered rows as JSON.
+# Previously read from HDI Accountaxcode table — now UI sends the data.
+#
+# Expected request body (JSON):
+# {
+#   "market":          "Hong Kong",          ← REQUIRED: string
+#   "processtype":     ["TRAVEL", "MEALS"],  ← REQUIRED: list
+#   "account_mapping": [                     ← REQUIRED: mapping table rows
+#       { "Account": "12345", "ExpenseType": "TRAVEL",
+#         "ProcessType": "TRAVEL", "Market": "Hong Kong" },
+#       ...
+#   ]
+# }
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/v1/getAccountMapping', methods=['POST'])
+def get_account_mapping():
+    try:
+        payload = request.get_json(silent=True)
+        if not payload:
+            return jsonify({"status": "error", "message": "Missing JSON body"}), 400
+
+        # ── Step 1: Validate market ───────────────────────────────────────────
+        market = payload.get('market')
+        if not market:
+            return jsonify({"status": "error", "message": "'market' is required"}), 400
+
+        # ── Step 2: Validate processtype — UI always sends as list ────────────
+        process_type = payload.get('processtype')
+        if not isinstance(process_type, list) or not process_type:
+            return jsonify({"status": "error",
+                            "message": "'processtype' must be a non-empty list e.g. ['TRAVEL','MEALS']"}), 400
+
+        print(f"📋 market        : {market}")
+        print(f"📋 process_types : {process_type}")
+
+        # ── Step 3: Validate account mapping data ─────────────────────────────
+        account_map_data = payload.get('account_mapping', [])
+        if not account_map_data:
+            return jsonify({"status": "error",
+                            "message": "'account_mapping' list is required"}), 400
+
+        # convert list of dicts → DataFrame for filtering
+        mapping_df = pd.DataFrame(account_map_data)
+
+        # ── Step 4: Filter by market ──────────────────────────────────────────
+        if 'Market' not in mapping_df.columns:
+            return jsonify({"status": "error",
+                            "message": "'Market' column missing in account_mapping data"}), 400
+
+        mapping_df = mapping_df[mapping_df['Market'] == market]
+        print(f"📋 rows after market filter    : {len(mapping_df)}")
+
+        # ── Step 5: Filter by processtype ────────────────────────────────────
+        # .isin(process_type) handles multiple values correctly
+        if 'ProcessType' in mapping_df.columns:
+            mapping_df = mapping_df[mapping_df['ProcessType'].isin(process_type)]
+            print(f"📋 rows after processtype filter: {len(mapping_df)}")
+        else:
+            print(f"⚠️ 'ProcessType' column not found — skipping processtype filter")
+
+        return jsonify({"status": "success", "data": mapping_df.to_dict(orient='records')})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /v1/process
+# Main prediction pipeline trigger.
+# UI sends all data — journal lines, account mapping, config table rows.
+# Server converts config rows → flat config_params dict internally.
+# Calls process_data() in pipeline.py and returns prediction results.
+#
+# Expected request body (JSON):
+# {
+#   "market":          "Hong Kong",          ← REQUIRED: string
+#   "processtype":     ["TRAVEL", "MEALS"],  ← REQUIRED: list
+#   "journal_lines":   [ { ...rows... } ],   ← REQUIRED
+#   "account_mapping": [ { ...rows... } ],   ← REQUIRED
+#   "config": [                              ← REQUIRED
+#       { "Market": "Hong Kong", "ProcessType": "TRAVEL",
+#         "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" },
+#       ...
+#   ]
+# }
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/v1/process', methods=['POST'])
+def process():
+    try:
+        payload = request.get_json(silent=True)
+        if not payload:
+            return jsonify({"status": "error", "message": "Missing JSON body"}), 400
+
+        # ── Step 1: Validate market ───────────────────────────────────────────
+        market = payload.get('market')
+        if not market:
+            return jsonify({"status": "error", "message": "'market' is required"}), 400
+
+        # ── Step 2: Validate processtype — UI always sends as list ────────────
+        process_type = payload.get('processtype')
+        if not isinstance(process_type, list) or not process_type:
+            return jsonify({"status": "error",
+                            "message": "'processtype' must be a non-empty list e.g. ['TRAVEL','MEALS']"}), 400
+
+        # ── Step 3: Validate all required data keys ───────────────────────────
+        if not payload.get('journal_lines'):
+            return jsonify({"status": "error", "message": "'journal_lines' is required"}), 400
+        if not payload.get('account_mapping'):
+            return jsonify({"status": "error", "message": "'account_mapping' is required"}), 400
+        if not payload.get('config'):
+            return jsonify({"status": "error", "message": "'config' is required"}), 400
+
+        # ── Step 4: Convert config rows → flat config_params dict ─────────────
+        # UI sends config as table rows (list of dicts):
+        # [ { "Market": "HK", "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" } ]
+        #
+        # process_data() in pipeline.py needs a flat key-value dict:
+        # { "THRESHOLD_AMOUNT": "50000" }
+        #
+        # server does this conversion — UI stays simple, no double sending
+        config_rows = payload.get('config', [])
+        config_df   = pd.DataFrame(config_rows)
+
+        # filter config rows by market first
+        if 'Market' in config_df.columns:
+            config_df = config_df[config_df['Market'] == market]
+
+        # filter config rows by processtype only if ProcessType column exists
+        # some config rows may be global (no ProcessType) — keep those too
+        if 'ProcessType' in config_df.columns:
+            # keep rows that match processtype OR have no ProcessType value
+            config_df = config_df[
+                config_df['ProcessType'].isin(process_type) |
+                config_df['ProcessType'].isna()
+            ]
+
+        # validate Parameter and Value columns exist before converting
+        if 'Parameter' not in config_df.columns or 'Value' not in config_df.columns:
+            return jsonify({"status": "error",
+                            "message": "config rows must have 'Parameter' and 'Value' columns"}), 400
+
+        # zip() pairs Parameter and Value columns together
+        # dict() converts those pairs → flat key-value dict
+        # e.g. Parameter=["THRESHOLD_AMOUNT"], Value=["50000"]
+        #   → {"THRESHOLD_AMOUNT": "50000"}
+        config_params = dict(zip(config_df['Parameter'], config_df['Value']))
+        print(f"📋 config_params built: {list(config_params.keys())}")
+
+        # ── Step 5: Build internal payload for process_data() ─────────────────
+        # process_data() in pipeline.py expects this exact structure
+        # rebuilt cleanly here so pipeline.py never needs to know
+        # about the raw UI payload format
+        internal_payload = {
+            "market":          market,
+            "journal_lines":   payload.get('journal_lines'),
+            "account_mapping": payload.get('account_mapping'),
+            "config_params":   config_params
+        }
+
+        print(f"📋 market         : {market}")
+        print(f"📋 process_types  : {process_type}")
+        print(f"📋 journal_lines  : {len(internal_payload['journal_lines'])} rows")
+        print(f"📋 account_mapping: {len(internal_payload['account_mapping'])} rows")
+
+        # ── Step 6: Call pipeline and return result ───────────────────────────
+        # process_data() runs the full ML pipeline and returns:
+        # { status, message, rows_processed, execution_time_seconds, data }
+        result = process_data(internal_payload)
+
+        # jsonify() converts result dict → JSON HTTP response
+        return jsonify(result)
+
+    except Exception as e:
+        # traceback.format_exc() → full stack trace as readable string
+        # helps developers debug exactly which line caused the error
+        return jsonify({
+            "status":    "error",
+            "message":   str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # POST /v1/OverwritePrediction
 # Accepts reviewer-corrected prediction records from the UI.
-# Validates that all primary keys are present, then returns the records.
+# Validates all primary keys are present, returns accepted records as JSON.
 # Previously wrote to HDI JRNLOUTPUT table — now returns JSON to UI only.
 #
 # Expected body: a single record dict OR a list of record dicts
@@ -330,24 +422,18 @@ def upsert_jrnoutput():
             return jsonify({"status": "error", "message": "Missing JSON body"}), 400
 
         # allow UI to send either a single dict or a list of dicts
-        # isinstance(payload, list) → True if payload is already a list
-        # if it's a single dict, wrap it in a list so the rest of the code
-        # always works with a list — consistent handling either way
+        # if it is a single dict → wrap in [] so code always works with a list
         records = payload if isinstance(payload, list) else [payload]
 
-        # validate all primary keys are present in every record
-        # _validate_primary_keys() returns [] if all good, or list of missing keys
+        # validate all 7 primary keys are present in every record
         missing = _validate_primary_keys(records)
         if missing:
-            # 400 Bad Request — client sent incomplete data
             return jsonify({
                 "status":  "error",
                 "message": "Missing primary key(s)",
-                "details": missing   # tells the UI exactly which keys are missing
+                "details": missing
             }), 400
 
-        # return accepted records back to UI
-        # f-string: f"{len(records)}" → inserts the count of records into the string
         return jsonify({
             "status":  "success",
             "message": f"{len(records)} record(s) accepted.",
@@ -361,7 +447,7 @@ def upsert_jrnoutput():
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /v1/OverwriteReview
 # Accepts operator-level review records from the UI.
-# Same logic as OverwritePrediction but for a separate review stage.
+# Same validation logic as OverwritePrediction but for a separate review stage.
 # Previously wrote to HDI JRNLOPREVIEW table — now returns JSON to UI only.
 #
 # Expected body: a single record dict OR a list of record dicts
@@ -374,10 +460,8 @@ def upsert_jrnreview():
         if not payload:
             return jsonify({"status": "error", "message": "Missing JSON body"}), 400
 
-        # same pattern as OverwritePrediction — accept single dict or list
         records = payload if isinstance(payload, list) else [payload]
 
-        # reuse the same primary key validation helper
         missing = _validate_primary_keys(records)
         if missing:
             return jsonify({
@@ -399,7 +483,7 @@ def upsert_jrnreview():
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /saveAccountMapping
 # Accepts updated account mapping records from the UI.
-# Validates required fields are present, then returns the records.
+# Validates required fields, returns accepted records as JSON.
 # Previously wrote to HDI Accountaxcode table — now returns JSON to UI only.
 #
 # Expected request body (JSON):
@@ -419,9 +503,8 @@ def save_account_mapping():
         if not payload:
             return jsonify({"status": "error", "message": "Missing JSON body"}), 400
 
-        # extract the "payload" key from the request body
-        # this is a list of account mapping records to save
-        # default [] means no crash if "payload" key is missing
+        # extract the records list from the "payload" key
+        # default [] means no crash if "payload" key is missing in body
         records = payload.get('payload', [])
         if not records:
             return jsonify({"status": "error", "message": "No records in 'payload'"}), 400
@@ -429,13 +512,13 @@ def save_account_mapping():
         # these 4 fields are required in every account mapping record
         required = ["Account", "ExpenseType", "ProcessType", "Market"]
 
-        # same pattern as _validate_primary_keys but inline here
-        # builds a list of missing field details across all records
+        # loop over every record and every required field
+        # if a field is missing → add details to missing list
         missing = [
             {"index": i, "missing_key": k}
-            for i, rec in enumerate(records)   # loop over each record
-            for k in required                  # loop over each required field
-            if k not in rec                    # only if field is missing
+            for i, rec in enumerate(records)
+            for k in required
+            if k not in rec
         ]
         if missing:
             return jsonify({
@@ -444,7 +527,6 @@ def save_account_mapping():
                 "details": missing
             }), 400
 
-        # return accepted records back to UI
         return jsonify({
             "status":  "success",
             "message": f"Updated {len(records)} record(s).",
@@ -457,19 +539,16 @@ def save_account_mapping():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App entry point
-# Only runs when this file is executed directly: python app.py
-# NOT executed when SAP AI Core imports this file via gunicorn/uwsgi
+# Only runs when executed directly: python app.py
+# NOT executed when SAP AI Core runs this via gunicorn/uwsgi
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    # read PORT from environment variable — SAP AI Core injects this at runtime
-    # if not set (e.g. running locally) default to port 8080
-    # int() converts the string env variable → integer that app.run() expects
+    # read PORT from environment — SAP AI Core injects this at container startup
+    # if not set (local development) default to 8080
+    # int() converts string env variable → integer that app.run() expects
     port = int(os.environ.get('PORT', 8080))
 
-    # start the Flask development server
-    # host='0.0.0.0' → listen on all network interfaces (required for Docker)
-    #                   '127.0.0.1' would only accept connections from localhost
-    # port=port       → the port number read above
+    # host='0.0.0.0' → listen on all network interfaces (required inside Docker)
+    #                   without this only localhost connections would work
     app.run(host='0.0.0.0', port=port)
-```
