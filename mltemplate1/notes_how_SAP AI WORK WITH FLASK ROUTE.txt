@@ -1,0 +1,101 @@
+Yes, exactly right. Let me explain this clearly.
+
+---
+
+**What "server" means in your context**
+
+When you deploy your ML code to SAP AI Core and the container starts running, that running container **is** the server.
+
+```
+Your laptop / UI browser
+        ↓  HTTP request
+SAP AI Core
+        ↓  spins up
+Docker Container (running your Flask app)
+        ↑
+        THIS is the server
+```
+
+---
+
+**What happens step by step when container starts**
+
+```
+You trigger deployment in SAP AI Launchpad
+        ↓
+SAP AI Core pulls your Docker image from registry
+        ↓
+SAP AI Core copies model artifacts from S3
+into /mnt/models/ inside the container
+        ↓
+Container starts running
+        ↓
+Python executes:  app.run(host='0.0.0.0', port=8080)
+        ↓
+Flask starts listening for incoming HTTP requests
+        ↑
+        THIS moment = server is alive
+        ↓
+SAP AI Core gives you a deployment URL
+e.g. https://your-deployment.aws.ai-prod.cloud.sap/v1/process
+        ↓
+UI calls that URL → request hits your Flask app
+→ Flask routes it to the right function
+→ function runs, returns JSON
+→ UI receives the response
+```
+
+---
+
+**The three things your "server" does**
+
+```
+1. Serves the UI files
+   app.run() → serves index.html, CSS, JS from webapp/ folder
+   Browser loads your React/HTML frontend from here
+
+2. Handles API routes
+   @app.route('/v1/process') etc.
+   Receives requests, runs ML logic, returns JSON
+
+3. Loads and runs ML models
+   joblib.load() reads .pkl files from /mnt/models/
+   pipeline.predict_proba() runs inference
+```
+
+---
+
+**How SAP AI Core fits around your server**
+
+```
+┌─────────────────────────────────────────────────┐
+│              SAP AI Core Platform               │
+│                                                 │
+│  ┌──────────────────────────────────────────┐  │
+│  │         Kubernetes Pod                   │  │
+│  │                                          │  │
+│  │  ┌────────────────────────────────────┐  │  │
+│  │  │      Docker Container              │  │  │
+│  │  │                                    │  │  │
+│  │  │   Flask app (app.py)               │  │  │
+│  │  │   ← THIS IS YOUR SERVER            │  │  │
+│  │  │                                    │  │  │
+│  │  │   /mnt/models/                     │  │  │
+│  │  │   ├── model_config_HongKong.json   │  │  │
+│  │  │   ├── model_HongKong_TRAVEL.joblib │  │  │
+│  │  │   └── model_HongKong_MEALS.joblib  │  │  │
+│  │  │   ← copied from S3 by AI Core      │  │  │
+│  │  └────────────────────────────────────┘  │  │
+│  └──────────────────────────────────────────┘  │
+│                                                 │
+│  Load balancer → routes UI requests to pod      │
+│  Object Store Secret → S3 credentials           │
+│  Deployment URL → public endpoint to your Flask │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+**In one sentence**
+
+Yes — when SAP AI Core invokes your container and Flask starts listening on port 8080, that running container is your server. SAP AI Core is just the platform that manages, scales, and exposes that container to the outside world via a deployment URL.
