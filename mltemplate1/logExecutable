@@ -348,119 +348,145 @@ def get_account_mapping():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# POST /v1/process
-# Main prediction pipeline trigger.
-# UI sends market, journal lines, account mapping, and config table rows.
-# process_types loaded from metadata — UI does NOT send processtype.
-# Server converts config rows → flat config_params dict internally.
-# Calls process_data() in pipeline.py and returns prediction results.
-#
-# Expected request body (JSON):
-# {
-#   "market":          "Hong Kong",   ← REQUIRED: string
-#   "journal_lines":   [ {...} ],     ← REQUIRED: journal line rows
-#   "account_mapping": [ {...} ],     ← REQUIRED: account mapping rows
-#   "config": [                       ← REQUIRED: config table rows
-#       { "Market": "Hong Kong", "ProcessType": "TRAVEL",
-#         "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" },
-#       ...
-#   ]
-# }
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/v1/process', methods=['POST'])
 def process():
+    """
+    Main prediction pipeline trigger.
+    UI sends all data — journal lines, account mapping, config rows.
+    process_types is loaded from metadata — UI does NOT send it.
+    Config rows are already filtered by /v1/getConfig before this call —
+    no re-filtering needed here, just convert directly to config_params dict.
+
+    Expected request body (JSON):
+    {
+        "market":          "Hong Kong",        ← REQUIRED: string
+        "journal_lines":   [ { ...rows... } ], ← REQUIRED: journal line rows
+        "account_mapping": [ { ...rows... } ], ← REQUIRED: account mapping rows
+        "config": [                            ← REQUIRED: already-filtered config rows
+            { "Parameter": "THRESHOLD_AMOUNT",       "Value": "30000" },
+            { "Parameter": "OW_RL_FM_PROFIT_CENTRE", "Value": "1234"  },
+            { "Parameter": "NET_OFF_GROUPBY",         "Value": "DocumentNumber,GLAccount" }
+        ]
+    }
+    """
     try:
+        # parse JSON request body → Python dict
+        # silent=True → returns None instead of raising error if body is invalid
         payload = request.get_json(silent=True)
         if not payload:
-            return jsonify({"status": "error", "message": "Missing JSON body"}), 400
+            return jsonify({"status": "error",
+                            "message": "Missing JSON body"}), 400
 
-        # ── Step 1: Get market and process_types from metadata ────────────────
-        # process_types comes from metadata — NOT from UI payload
-        # this is the same process_types the model was trained with
+        # ── Step 1: Validate market ───────────────────────────────────────────
+        # market is the only thing UI needs to send for identification
+        # everything else (process_types etc.) is derived from metadata on disk
+        market = payload.get('market')
+        if not market:
+            return jsonify({"status": "error",
+                            "message": "'market' is required"}), 400
+
+        # ── Step 2: Load process_types from metadata ──────────────────────────
+        # process_types ALWAYS comes from metadata — never from UI payload
+        # this guarantees process_types always matches what the model was trained with
+        # _get_market_and_process_types() loads model_config_{market}.json from disk
+        # and extracts process_types from it
+        # returns (market, process_types, None) on success
+        # returns (None, None, error_response) on failure
         market, process_types, err = _get_market_and_process_types(payload)
         if err:
+            # err is a (jsonify_response, status_code) tuple — return it directly
             return err
 
-        # ── Step 2: Validate all required data keys are present ───────────────
+        # ── Step 3: Validate all required data keys are present ───────────────
+        # journal_lines   → raw transaction rows (was HDI JRNLINEITM table)
+        # account_mapping → GL account to expense type mapping (was HDI Accountaxcode)
+        # config          → configuration parameters (was HDI Configuration table)
+        # all three must be present — pipeline cannot run without any of them
         if not payload.get('journal_lines'):
             return jsonify({"status": "error",
                             "message": "'journal_lines' is required"}), 400
+
         if not payload.get('account_mapping'):
             return jsonify({"status": "error",
                             "message": "'account_mapping' is required"}), 400
+
         if not payload.get('config'):
             return jsonify({"status": "error",
                             "message": "'config' is required"}), 400
 
-        # ── Step 3: Convert config rows → flat config_params dict ─────────────
-        # UI sends config as table rows (list of dicts):
-        # [{"Market":"HK","ProcessType":"TRAVEL","Parameter":"THRESHOLD_AMOUNT","Value":"50000"}]
+        # ── Step 4: Convert config rows → flat config_params dict ─────────────
+        # UI sends config as a list of { Parameter, Value } rows
+        # these rows are ALREADY filtered by market and process_types
+        # because the UI received them from /v1/getConfig which did the filtering
+        # so NO re-filtering is needed here — just convert directly
         #
-        # process_data() in pipeline.py needs a flat key-value dict:
-        # { "THRESHOLD_AMOUNT": "50000" }
+        # BEFORE (redundant filtering removed):
+        #   config_df = config_df[config_df['Market'] == market]        ← removed
+        #   config_df = config_df[config_df['ProcessType'].isin(...)]   ← removed
         #
-        # server does this conversion using process_types from metadata
-        # UI stays simple — only sends raw table rows
+        # AFTER (clean direct conversion):
+        #   just convert Parameter + Value columns → flat key-value dict
         config_rows = payload.get('config', [])
-        config_df   = pd.DataFrame(config_rows)
 
-        # filter config by market
-        if 'Market' in config_df.columns:
-            config_df = config_df[config_df['Market'] == market]
+        # convert list of dicts → DataFrame
+        # e.g. [{"Parameter":"THRESHOLD_AMOUNT","Value":"30000"}] → DataFrame
+        config_df = pd.DataFrame(config_rows)
 
-        # filter config by process_types from metadata
-        # keep matching rows AND global rows (no ProcessType value)
-        # global rows are config params that apply to all process types
-        if 'ProcessType' in config_df.columns:
-            config_df = config_df[
-                config_df['ProcessType'].isin(process_types) |  # matches process_types
-                config_df['ProcessType'].isna()                  # OR global rows
-            ]
-
-        # validate Parameter and Value columns exist before converting
+        # validate Parameter and Value columns exist in the config data
+        # without these two columns we cannot build config_params
         if 'Parameter' not in config_df.columns or 'Value' not in config_df.columns:
             return jsonify({"status": "error",
                             "message": "config rows must have 'Parameter' and 'Value' columns"}), 400
 
-        # zip() pairs Parameter and Value columns together
+        # zip() pairs Parameter and Value columns together row by row
         # dict() converts those pairs → flat key-value dict
-        # e.g. Parameter=["THRESHOLD_AMOUNT"], Value=["50000"]
-        #   → { "THRESHOLD_AMOUNT": "50000" }
+        # e.g. Parameter = ["THRESHOLD_AMOUNT", "OW_RL_FM_PROFIT_CENTRE"]
+        #      Value      = ["30000",            "1234"                  ]
+        #   → { "THRESHOLD_AMOUNT": "30000", "OW_RL_FM_PROFIT_CENTRE": "1234" }
+        # if user edited THRESHOLD_AMOUNT to 30000 in the UI form,
+        # that edited value is already inside config_rows — it arrives here as-is
         config_params = dict(zip(config_df['Parameter'], config_df['Value']))
-        print(f"📋 config_params built: {list(config_params.keys())}")
+        print(f"📋 config_params built : {list(config_params.keys())}")
 
-        # ── Step 4: Build internal payload for process_data() ─────────────────
+        # ── Step 5: Build internal payload for process_data() ─────────────────
         # process_data() in pipeline.py expects this exact structure
-        # rebuilt cleanly here so pipeline.py never needs to know
-        # about the raw UI payload format
+        # we rebuild it cleanly here so pipeline.py never needs to know
+        # about the raw UI payload format or how config was converted
         internal_payload = {
             "market":          market,
-            "journal_lines":   payload.get('journal_lines'),
-            "account_mapping": payload.get('account_mapping'),
-            "config_params":   config_params
+            "journal_lines":   payload.get('journal_lines'),    # raw journal rows
+            "account_mapping": payload.get('account_mapping'),  # GL account mapping
+            "config_params":   config_params                    # flat key-value dict
         }
 
-        print(f"📋 journal_lines  : {len(internal_payload['journal_lines'])} rows")
-        print(f"📋 account_mapping: {len(internal_payload['account_mapping'])} rows")
+        print(f"📋 market          : {market}")
+        print(f"📋 process_types   : {process_types}")
+        print(f"📋 journal_lines   : {len(internal_payload['journal_lines'])} rows")
+        print(f"📋 account_mapping : {len(internal_payload['account_mapping'])} rows")
 
-        # ── Step 5: Call pipeline and return result ───────────────────────────
-        # process_data() runs the full ML pipeline and returns:
+        # ── Step 6: Call pipeline and return result ───────────────────────────
+        # process_data() in pipeline.py runs the full ML pipeline:
+        # load models → filter accounts → preprocess text → predict
+        # → net-off logic → threshold logic → overwrite rules → final columns
+        #
+        # result is already a dict:
         # { status, message, rows_processed, execution_time_seconds, data }
         result = process_data(internal_payload)
 
         # jsonify() converts result dict → JSON HTTP response
+        # 200 OK is the default status code
         return jsonify(result)
 
     except Exception as e:
-        # traceback.format_exc() → full stack trace as readable string
-        # helps developers debug exactly which line caused the error
+        # traceback.format_exc() → full stack trace as a readable string
+        # included in the error response so developers can debug exactly
+        # which line in process_data() or the route itself caused the error
         return jsonify({
             "status":    "error",
             "message":   str(e),
             "traceback": traceback.format_exc()
         }), 500
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /v1/OverwritePrediction
