@@ -1,33 +1,11 @@
-metadata = {
-    "key_cols":      ["ExpenseType"],
-    "text_column":   "TEXT(S4Journal)",
-    "target_column": "taxcategory",
-    "allowed_class": ["Deductible", "Non-deductible"],
-    "seasonal_words": "mbfc,cbp,rcls",
-    "market":        "Hong Kong",
-    "process_types": ["Provisions and Payments of Operating Losses (B/S)",
-                      "Provisions and Payments of Operating Losses (P/L)"],
+metadata["models"]["TRAVEL"]              models["TRAVEL"]
+─────────────────────────────    ──────►  ────────────────────────────
+{                                         Pipeline([
+  "model_file": "model_         joblib      ("preprocess", FunctionTransformer),
+     HongKong_TRAVEL.joblib",   .load()     ("tfidf",      TfidfVectorizer),
+  "metrics": {...},                          ("nb",         MultinomialNB)
+  "train_size": 120             ──────►  ])
+}                                         with all learned weights inside
+just a dict with strings                  a real usable Python object
 
-    # ← this is the "models" dict — two keys: "TRAVEL" and "MEALS"
-    "models": {
-
-        "TRAVEL": {                                               # ← key 1
-            "model_file":    "model_HongKong_TRAVEL.joblib",     # ← filename joblib.load() will read
-            "metrics":       {"test_accuracy": 0.91,
-                              "test_f1_macro": 0.89},
-            "train_size":    450,
-            "test_size":     112,
-            "model_file_sg": "model_Singapore_TRAVEL.joblib"     # TEMP duplicate
-        },
-
-        "MEALS": {                                                # ← key 2
-            "model_file":    "model_HongKong_MEALS.joblib",      # ← filename joblib.load() will read
-            "metrics":       {"test_accuracy": 0.87,
-                              "test_f1_macro": 0.85},
-            "train_size":    300,
-            "test_size":     75,
-            "model_file_sg": "model_Singapore_MEALS.joblib"      # TEMP duplicate
-        }
-
-    }
-}
+metadata["models"] only holds file references (strings) — load_models() uses those strings to find the .joblib files on disk, calls joblib.load() on each one, and builds a completely separate models dict that holds the actual Pipeline objects ready for prediction
