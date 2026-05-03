@@ -17,8 +17,7 @@ import os
 # os → reads environment variables (like PORT) and builds file paths
 
 import pandas as pd
-# pandas → used in get_config(), get_account_mapping() and process()
-# for converting list of dicts → DataFrame and filtering rows
+# pandas → used for converting list of dicts → DataFrame and filtering rows
 
 # ── Import ML logic from separate files ──────────────────────────────────────
 from pipeline import process_data
@@ -27,13 +26,13 @@ from pipeline import process_data
 
 from model_loader import load_metadata
 # load_metadata() lives in model_loader.py — reads model_config_{market}.json
-# imported here for the /v1/getMetadata route only
+# imported here because multiple routes need to load metadata by market
 
 
 # ── Create the Flask application ─────────────────────────────────────────────
 app = Flask(__name__, static_folder="webapp", static_url_path="")
 # Flask(__name__)     → creates the app, __name__ tells Flask which module it is
-# static_folder       → folder name where UI files (HTML, CSS, JS) are stored
+# static_folder       → folder where UI files (HTML, CSS, JS) are stored
 # static_url_path=""  → serve static files from root URL "/" not "/static/"
 
 CORS(app)
@@ -62,12 +61,69 @@ def serve_static(filename):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Helper: _get_market_and_process_types(payload)
+# Extracts market from payload, loads metadata from disk,
+# and returns both market and process_types.
+#
+# process_types ALWAYS comes from metadata — never from the UI payload.
+# This ensures process_types always matches what the model was trained with.
+#
+# Used by get_config(), get_account_mapping(), and process() routes
+# because all three need market + process_types before doing anything.
+#
+# Returns: (market, process_types, error_response)
+#   - if successful : (market, ["TRAVEL","MEALS",...], None)
+#   - if failed     : (None,   None,                  jsonify error response)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_market_and_process_types(payload):
+    # extract market from the UI payload
+    # market is the only thing the UI needs to send — everything else
+    # is derived from the metadata file on disk
+    market = payload.get('market')
+
+    # market is required — without it we cannot find the metadata file
+    if not market:
+        return None, None, (jsonify({"status": "error",
+                                     "message": "'market' is required"}), 400)
+
+    # load model_config_{market}.json from /mnt/models/ on disk
+    # this file was produced by the trainer and copied here by SAP AI Core
+    # returns a Python dict containing text_column, key_cols, process_types etc.
+    try:
+        metadata = load_metadata(market)
+    except FileNotFoundError as e:
+        # config file for this market does not exist on disk
+        # means either training never ran or artifact was not registered
+        return None, None, (jsonify({"status": "error", "message": str(e)}), 404)
+    except Exception as e:
+        return None, None, (jsonify({"status": "error", "message": str(e)}), 500)
+
+    # extract process_types from metadata
+    # set by trainer at training time — always a list e.g. ["TRAVEL", "MEALS"]
+    # this is the ONLY source of process_types — never from UI payload
+    process_types = metadata.get('process_types')
+
+    # safety check — if process_types is missing in metadata,
+    # the model was saved incorrectly and needs to be retrained
+    if not process_types:
+        return None, None, (jsonify({"status": "error",
+                                     "message": f"'process_types' missing in metadata for market '{market}' — retrain the model!"}), 500)
+
+    print(f"📋 market         : {market}")
+    print(f"📋 process_types  : {process_types}")
+
+    # return market, process_types, and None for error (None = no error)
+    return market, process_types, None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Helper: _validate_primary_keys(records)
-# Checks that every record in a list contains all required primary key fields.
+# Checks that every record contains all required primary key fields.
 # Used by OverwritePrediction and OverwriteReview — both need the same check.
 # Extracted into one helper to avoid repeating the same logic twice.
 #
-# Returns a list of missing key details — empty list means all keys present.
+# Returns: list of missing key details — empty list means all keys present.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _validate_primary_keys(records):
@@ -85,7 +141,7 @@ def _validate_primary_keys(records):
         {"index": i, "missing_key": pk}
         for i, rec in enumerate(records)   # i = row number, rec = the dict
         for pk in primary_keys             # pk = each required key name
-        if pk not in rec                   # only include if key is missing
+        if pk not in rec                   # only add if key is missing
     ]
     return missing
 
@@ -104,7 +160,7 @@ def health():
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /v1/getMetadata?market=Hong+Kong
 # Returns model_config_{market}.json contents as JSON.
-# Still reads from disk (/mnt/models/) — no UI data needed here.
+# Reads from disk (/mnt/models/) — no UI data needed here.
 # market is passed as a URL query parameter e.g. ?market=Hong Kong
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -112,21 +168,23 @@ def health():
 def get_metadata():
     try:
         # request.args → dict of URL query parameters (everything after ?)
-        # .get('market') → safely returns None if ?market= is not in the URL
+        # .get('market') → safely returns None if ?market= is missing
         market = request.args.get('market')
 
-        # market is required — without it we don't know which config file to load
+        # market is required — without it we don't know which file to load
         if not market:
-            return jsonify({"status": "error", "message": "'market' param is required"}), 400
+            return jsonify({"status": "error",
+                            "message": "'market' param is required"}), 400
 
         # load_metadata() reads model_config_{market}.json from /mnt/models/
         # returns a Python dict — becomes JSON only when jsonify() is called
         metadata = load_metadata(market)
 
+        # jsonify() converts Python dict → JSON HTTP response
         return jsonify({"status": "success", "data": metadata})
 
     except FileNotFoundError as e:
-        # raised by load_metadata() if config file doesn't exist for this market
+        # config file doesn't exist for this market on disk
         # 404 = resource not found
         return jsonify({"status": "error", "message": str(e)}), 404
 
@@ -136,15 +194,17 @@ def get_metadata():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /v1/getConfig
-# Receives the full config table from UI, filters by market and processtype,
-# returns filtered rows as JSON.
+# Receives the full config table from UI.
+# Loads process_types from metadata (not from UI).
+# Filters config rows by market and process_types.
+# Returns filtered rows as JSON.
+#
 # Previously read from HDI Configuration table — now UI sends the data.
 #
 # Expected request body (JSON):
 # {
-#   "market":      "Hong Kong",              ← REQUIRED: string
-#   "processtype": ["TRAVEL", "MEALS"],      ← REQUIRED: list (UI always sends list)
-#   "config": [                              ← REQUIRED: config table rows
+#   "market": "Hong Kong",      ← REQUIRED: used to load metadata + filter
+#   "config": [                 ← REQUIRED: full config table rows from UI
 #       { "Market": "Hong Kong", "ProcessType": "TRAVEL",
 #         "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" },
 #       { "Market": "Hong Kong",
@@ -152,67 +212,67 @@ def get_metadata():
 #   ]
 # }
 #
-# Note: ProcessType column may not exist in every config row — handled safely.
+# process_types loaded from metadata — UI does NOT send processtype.
+# ProcessType column may not exist in every config row — handled safely.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/v1/getConfig', methods=['POST'])
 def get_config():
     try:
-        # request.get_json(silent=True) → parses JSON body → Python dict
-        # silent=True → returns None instead of raising error if body is invalid
+        # parse JSON request body → Python dict
+        # silent=True → returns None if body is missing or invalid JSON
         payload = request.get_json(silent=True)
         if not payload:
             return jsonify({"status": "error", "message": "Missing JSON body"}), 400
 
-        # ── Step 1: Extract and validate market ───────────────────────────────
-        market = payload.get('market')
-        if not market:
-            return jsonify({"status": "error", "message": "'market' is required"}), 400
+        # ── Step 1: Get market and process_types from metadata ────────────────
+        # process_types comes from metadata on disk — NOT from UI payload
+        # _get_market_and_process_types() loads metadata and extracts process_types
+        market, process_types, err = _get_market_and_process_types(payload)
+        if err:
+            # err is a (jsonify_response, status_code) tuple — return it directly
+            return err
 
-        # ── Step 2: Extract and validate processtype ──────────────────────────
-        # UI always sends processtype as a list e.g. ["TRAVEL", "MEALS"]
-        # no conversion needed — just validate it is a non-empty list
-        process_type = payload.get('processtype')
-        if not isinstance(process_type, list) or not process_type:
-            return jsonify({"status": "error",
-                            "message": "'processtype' must be a non-empty list e.g. ['TRAVEL','MEALS']"}), 400
-
-        print(f"📋 market        : {market}")
-        print(f"📋 process_types : {process_type}")
-
-        # ── Step 3: Extract and validate config data ──────────────────────────
+        # ── Step 2: Extract and validate config data ──────────────────────────
         # "config" is the full Configuration table rows sent from the UI
+        # this was previously read from HDI Configuration table
         config_data = payload.get('config', [])
         if not config_data:
-            return jsonify({"status": "error", "message": "'config' list is required"}), 400
+            return jsonify({"status": "error",
+                            "message": "'config' list is required"}), 400
 
-        # convert list of dicts → DataFrame for easy filtering
+        # convert list of dicts → DataFrame for filtering
         config_df = pd.DataFrame(config_data)
 
-        # ── Step 4: Filter by market — always required ────────────────────────
+        # ── Step 3: Filter by market ──────────────────────────────────────────
+        # Market column is always expected in config data
         if 'Market' not in config_df.columns:
             return jsonify({"status": "error",
                             "message": "'Market' column missing in config data"}), 400
 
-        # keep only rows where Market matches the requested market
+        # keep only rows where Market matches
         config_df = config_df[config_df['Market'] == market]
         print(f"📋 rows after market filter    : {len(config_df)}")
 
-        # ── Step 5: Filter by processtype — column might NOT exist ────────────
-        # some config rows may not have ProcessType (global params for all types)
-        # only filter if the column exists — otherwise return all market rows
+        # ── Step 4: Filter by process_types from metadata ────────────────────
+        # process_types is a list from metadata e.g. ["TRAVEL", "MEALS"]
+        # some config rows may not have ProcessType (global params) — keep those
+        # .isin() keeps rows where ProcessType matches ANY value in the list
         if 'ProcessType' in config_df.columns:
-            # .isin(process_type) → keeps rows where ProcessType matches
-            # ANY value in the list
-            # e.g. ["TRAVEL","MEALS"] keeps rows where ProcessType is TRAVEL OR MEALS
-            config_df = config_df[config_df['ProcessType'].isin(process_type)]
+            config_df = config_df[
+                config_df['ProcessType'].isin(process_types) |  # matches process_types
+                config_df['ProcessType'].isna()                  # OR has no ProcessType (global rows)
+            ]
             print(f"📋 rows after processtype filter: {len(config_df)}")
         else:
+            # ProcessType column doesn't exist in config data
+            # skip filter — return all market-filtered rows
             print(f"⚠️ 'ProcessType' column not found — skipping processtype filter")
 
         # to_dict(orient='records') → DataFrame → list of dicts
-        # one dict per row — natural format for UI to consume
-        return jsonify({"status": "success", "data": config_df.to_dict(orient='records')})
+        # one dict per row — natural format for UI table display
+        return jsonify({"status": "success",
+                        "data": config_df.to_dict(orient='records')})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -220,20 +280,24 @@ def get_config():
 
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /v1/getAccountMapping
-# Receives full account mapping table from UI, filters by market
-# and processtype, returns filtered rows as JSON.
+# Receives full account mapping table from UI.
+# Loads process_types from metadata (not from UI).
+# Filters rows by market and process_types.
+# Returns filtered rows as JSON.
+#
 # Previously read from HDI Accountaxcode table — now UI sends the data.
 #
 # Expected request body (JSON):
 # {
-#   "market":          "Hong Kong",          ← REQUIRED: string
-#   "processtype":     ["TRAVEL", "MEALS"],  ← REQUIRED: list
-#   "account_mapping": [                     ← REQUIRED: mapping table rows
+#   "market":          "Hong Kong",   ← REQUIRED: used to load metadata + filter
+#   "account_mapping": [              ← REQUIRED: full mapping table rows
 #       { "Account": "12345", "ExpenseType": "TRAVEL",
 #         "ProcessType": "TRAVEL", "Market": "Hong Kong" },
 #       ...
 #   ]
 # }
+#
+# process_types loaded from metadata — UI does NOT send processtype.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/v1/getAccountMapping', methods=['POST'])
@@ -243,21 +307,14 @@ def get_account_mapping():
         if not payload:
             return jsonify({"status": "error", "message": "Missing JSON body"}), 400
 
-        # ── Step 1: Validate market ───────────────────────────────────────────
-        market = payload.get('market')
-        if not market:
-            return jsonify({"status": "error", "message": "'market' is required"}), 400
+        # ── Step 1: Get market and process_types from metadata ────────────────
+        # process_types comes from metadata — NOT from UI payload
+        market, process_types, err = _get_market_and_process_types(payload)
+        if err:
+            return err
 
-        # ── Step 2: Validate processtype — UI always sends as list ────────────
-        process_type = payload.get('processtype')
-        if not isinstance(process_type, list) or not process_type:
-            return jsonify({"status": "error",
-                            "message": "'processtype' must be a non-empty list e.g. ['TRAVEL','MEALS']"}), 400
-
-        print(f"📋 market        : {market}")
-        print(f"📋 process_types : {process_type}")
-
-        # ── Step 3: Validate account mapping data ─────────────────────────────
+        # ── Step 2: Extract and validate account mapping data ─────────────────
+        # "account_mapping" contains the Accountaxcode table rows from UI
         account_map_data = payload.get('account_mapping', [])
         if not account_map_data:
             return jsonify({"status": "error",
@@ -266,23 +323,25 @@ def get_account_mapping():
         # convert list of dicts → DataFrame for filtering
         mapping_df = pd.DataFrame(account_map_data)
 
-        # ── Step 4: Filter by market ──────────────────────────────────────────
+        # ── Step 3: Filter by market ──────────────────────────────────────────
         if 'Market' not in mapping_df.columns:
             return jsonify({"status": "error",
                             "message": "'Market' column missing in account_mapping data"}), 400
 
+        # keep only rows matching the requested market
         mapping_df = mapping_df[mapping_df['Market'] == market]
         print(f"📋 rows after market filter    : {len(mapping_df)}")
 
-        # ── Step 5: Filter by processtype ────────────────────────────────────
-        # .isin(process_type) handles multiple values correctly
+        # ── Step 4: Filter by process_types from metadata ────────────────────
+        # .isin(process_types) keeps rows matching ANY value in the list
         if 'ProcessType' in mapping_df.columns:
-            mapping_df = mapping_df[mapping_df['ProcessType'].isin(process_type)]
+            mapping_df = mapping_df[mapping_df['ProcessType'].isin(process_types)]
             print(f"📋 rows after processtype filter: {len(mapping_df)}")
         else:
             print(f"⚠️ 'ProcessType' column not found — skipping processtype filter")
 
-        return jsonify({"status": "success", "data": mapping_df.to_dict(orient='records')})
+        return jsonify({"status": "success",
+                        "data": mapping_df.to_dict(orient='records')})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -291,17 +350,17 @@ def get_account_mapping():
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /v1/process
 # Main prediction pipeline trigger.
-# UI sends all data — journal lines, account mapping, config table rows.
+# UI sends market, journal lines, account mapping, and config table rows.
+# process_types loaded from metadata — UI does NOT send processtype.
 # Server converts config rows → flat config_params dict internally.
 # Calls process_data() in pipeline.py and returns prediction results.
 #
 # Expected request body (JSON):
 # {
-#   "market":          "Hong Kong",          ← REQUIRED: string
-#   "processtype":     ["TRAVEL", "MEALS"],  ← REQUIRED: list
-#   "journal_lines":   [ { ...rows... } ],   ← REQUIRED
-#   "account_mapping": [ { ...rows... } ],   ← REQUIRED
-#   "config": [                              ← REQUIRED
+#   "market":          "Hong Kong",   ← REQUIRED: string
+#   "journal_lines":   [ {...} ],     ← REQUIRED: journal line rows
+#   "account_mapping": [ {...} ],     ← REQUIRED: account mapping rows
+#   "config": [                       ← REQUIRED: config table rows
 #       { "Market": "Hong Kong", "ProcessType": "TRAVEL",
 #         "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" },
 #       ...
@@ -316,47 +375,47 @@ def process():
         if not payload:
             return jsonify({"status": "error", "message": "Missing JSON body"}), 400
 
-        # ── Step 1: Validate market ───────────────────────────────────────────
-        market = payload.get('market')
-        if not market:
-            return jsonify({"status": "error", "message": "'market' is required"}), 400
+        # ── Step 1: Get market and process_types from metadata ────────────────
+        # process_types comes from metadata — NOT from UI payload
+        # this is the same process_types the model was trained with
+        market, process_types, err = _get_market_and_process_types(payload)
+        if err:
+            return err
 
-        # ── Step 2: Validate processtype — UI always sends as list ────────────
-        process_type = payload.get('processtype')
-        if not isinstance(process_type, list) or not process_type:
-            return jsonify({"status": "error",
-                            "message": "'processtype' must be a non-empty list e.g. ['TRAVEL','MEALS']"}), 400
-
-        # ── Step 3: Validate all required data keys ───────────────────────────
+        # ── Step 2: Validate all required data keys are present ───────────────
         if not payload.get('journal_lines'):
-            return jsonify({"status": "error", "message": "'journal_lines' is required"}), 400
+            return jsonify({"status": "error",
+                            "message": "'journal_lines' is required"}), 400
         if not payload.get('account_mapping'):
-            return jsonify({"status": "error", "message": "'account_mapping' is required"}), 400
+            return jsonify({"status": "error",
+                            "message": "'account_mapping' is required"}), 400
         if not payload.get('config'):
-            return jsonify({"status": "error", "message": "'config' is required"}), 400
+            return jsonify({"status": "error",
+                            "message": "'config' is required"}), 400
 
-        # ── Step 4: Convert config rows → flat config_params dict ─────────────
+        # ── Step 3: Convert config rows → flat config_params dict ─────────────
         # UI sends config as table rows (list of dicts):
-        # [ { "Market": "HK", "Parameter": "THRESHOLD_AMOUNT", "Value": "50000" } ]
+        # [{"Market":"HK","ProcessType":"TRAVEL","Parameter":"THRESHOLD_AMOUNT","Value":"50000"}]
         #
         # process_data() in pipeline.py needs a flat key-value dict:
         # { "THRESHOLD_AMOUNT": "50000" }
         #
-        # server does this conversion — UI stays simple, no double sending
+        # server does this conversion using process_types from metadata
+        # UI stays simple — only sends raw table rows
         config_rows = payload.get('config', [])
         config_df   = pd.DataFrame(config_rows)
 
-        # filter config rows by market first
+        # filter config by market
         if 'Market' in config_df.columns:
             config_df = config_df[config_df['Market'] == market]
 
-        # filter config rows by processtype only if ProcessType column exists
-        # some config rows may be global (no ProcessType) — keep those too
+        # filter config by process_types from metadata
+        # keep matching rows AND global rows (no ProcessType value)
+        # global rows are config params that apply to all process types
         if 'ProcessType' in config_df.columns:
-            # keep rows that match processtype OR have no ProcessType value
             config_df = config_df[
-                config_df['ProcessType'].isin(process_type) |
-                config_df['ProcessType'].isna()
+                config_df['ProcessType'].isin(process_types) |  # matches process_types
+                config_df['ProcessType'].isna()                  # OR global rows
             ]
 
         # validate Parameter and Value columns exist before converting
@@ -367,11 +426,11 @@ def process():
         # zip() pairs Parameter and Value columns together
         # dict() converts those pairs → flat key-value dict
         # e.g. Parameter=["THRESHOLD_AMOUNT"], Value=["50000"]
-        #   → {"THRESHOLD_AMOUNT": "50000"}
+        #   → { "THRESHOLD_AMOUNT": "50000" }
         config_params = dict(zip(config_df['Parameter'], config_df['Value']))
         print(f"📋 config_params built: {list(config_params.keys())}")
 
-        # ── Step 5: Build internal payload for process_data() ─────────────────
+        # ── Step 4: Build internal payload for process_data() ─────────────────
         # process_data() in pipeline.py expects this exact structure
         # rebuilt cleanly here so pipeline.py never needs to know
         # about the raw UI payload format
@@ -382,12 +441,10 @@ def process():
             "config_params":   config_params
         }
 
-        print(f"📋 market         : {market}")
-        print(f"📋 process_types  : {process_type}")
         print(f"📋 journal_lines  : {len(internal_payload['journal_lines'])} rows")
         print(f"📋 account_mapping: {len(internal_payload['account_mapping'])} rows")
 
-        # ── Step 6: Call pipeline and return result ───────────────────────────
+        # ── Step 5: Call pipeline and return result ───────────────────────────
         # process_data() runs the full ML pipeline and returns:
         # { status, message, rows_processed, execution_time_seconds, data }
         result = process_data(internal_payload)
@@ -426,6 +483,7 @@ def upsert_jrnoutput():
         records = payload if isinstance(payload, list) else [payload]
 
         # validate all 7 primary keys are present in every record
+        # returns [] if all good, list of missing details if not
         missing = _validate_primary_keys(records)
         if missing:
             return jsonify({
@@ -434,6 +492,7 @@ def upsert_jrnoutput():
                 "details": missing
             }), 400
 
+        # return accepted records back to UI
         return jsonify({
             "status":  "success",
             "message": f"{len(records)} record(s) accepted.",
@@ -447,7 +506,7 @@ def upsert_jrnoutput():
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /v1/OverwriteReview
 # Accepts operator-level review records from the UI.
-# Same validation logic as OverwritePrediction but for a separate review stage.
+# Same validation logic as OverwritePrediction but separate review stage.
 # Previously wrote to HDI JRNLOPREVIEW table — now returns JSON to UI only.
 #
 # Expected body: a single record dict OR a list of record dicts
@@ -460,8 +519,10 @@ def upsert_jrnreview():
         if not payload:
             return jsonify({"status": "error", "message": "Missing JSON body"}), 400
 
+        # same pattern as OverwritePrediction — accept single dict or list
         records = payload if isinstance(payload, list) else [payload]
 
+        # reuse the same primary key validation helper
         missing = _validate_primary_keys(records)
         if missing:
             return jsonify({
@@ -507,7 +568,8 @@ def save_account_mapping():
         # default [] means no crash if "payload" key is missing in body
         records = payload.get('payload', [])
         if not records:
-            return jsonify({"status": "error", "message": "No records in 'payload'"}), 400
+            return jsonify({"status": "error",
+                            "message": "No records in 'payload'"}), 400
 
         # these 4 fields are required in every account mapping record
         required = ["Account", "ExpenseType", "ProcessType", "Market"]
@@ -516,9 +578,9 @@ def save_account_mapping():
         # if a field is missing → add details to missing list
         missing = [
             {"index": i, "missing_key": k}
-            for i, rec in enumerate(records)
-            for k in required
-            if k not in rec
+            for i, rec in enumerate(records)   # i = row number, rec = dict
+            for k in required                  # k = each required field name
+            if k not in rec                    # only add if field is missing
         ]
         if missing:
             return jsonify({
