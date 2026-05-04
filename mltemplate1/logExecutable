@@ -1,355 +1,38 @@
-# ── Flask and web framework imports ──────────────────────────────────────────
-from flask import Flask, jsonify, request, send_from_directory
-# Flask               → creates the web application (the server itself)
-# jsonify             → converts Python dict → JSON response to send back to UI
-# request             → gives access to incoming HTTP request (body, params, headers)
-# send_from_directory → serves static files (HTML, CSS, JS) from a folder
+user: projects $ /home/user/.asdf-inst/shims/python3.13 "/home/user/projects/Prediction_Test copy.py"
+Getting token...
+Token retrieved ✅
 
-from flask_cors import CORS
-# CORS → allows the UI (running on a different port/domain) to call this API
-# without CORS, browsers block requests between different origins for security
+Checking metadata for market: Hong Kong
 
-import traceback
-# traceback → captures the full error stack trace when an exception occurs
-# useful for debugging — shows exactly which line caused the error
+=======================================================
+  🌏 Market        : Hong Kong
+  📂 Config file   : model_config_Hong_Kong.json
+  📦 Models found  : 0
+  📋 Process types : None
+  📝 Text column   : None
+  🔑 Key cols      : None
+  ✅ Allowed class : None
 
-import os
-# os → reads environment variables (like PORT) and builds file paths
+  🔑 Model files used:
+=======================================================
 
-# ── Import ML logic from separate files ──────────────────────────────────────
-from pipeline import process_data
-# process_data() lives in pipeline.py — contains the full ML prediction logic
-# including filtering account_mapping + config by market + process_types,
-# converting config rows → config_params dict, and running prediction
-# imported here so app.py stays clean — only handles HTTP, not data or ML
+Running prediction for market: Hong Kong...
 
-from model_loader import load_metadata
-# load_metadata() lives in model_loader.py
-# reads model_config_{market}.json from /mnt/models/ on disk
-# imported here only for the /v1/getMetadata route
+📤 Sending payload:
+   market          : Hong Kong
+   journal_lines   : 5 rows
+   account_mapping : 29 rows
+   config          : 12 rows
 
-
-# ── Create the Flask application ─────────────────────────────────────────────
-app = Flask(__name__, static_folder="webapp", static_url_path="")
-# Flask(__name__)     → creates the app, __name__ tells Flask which module it is
-# static_folder       → folder where UI files (HTML, CSS, JS) are stored
-# static_url_path=""  → serve static files from root URL "/" not "/static/"
-
-CORS(app)
-# enables CORS for ALL routes in this app
-# without this, the React/HTML UI cannot call this API from a browser
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Static file routes — serve the frontend UI
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/')
-# @app.route('/') registers this function to handle GET requests to root URL "/"
-# Flask calls root() automatically when someone visits the app URL
-# the function name doesn't matter — the decorator does the URL binding
-def root():
-    # reads index.html from the webapp/ folder and sends it to the browser
-    # this loads the React/HTML frontend so the user sees the UI
-    return send_from_directory(app.static_folder, 'index.html')
-
-
-@app.route('/<path:filename>')
-# <path:filename> → URL variable that captures everything after "/"
-# e.g. "/static/main.js"  → filename = "static/main.js"
-# e.g. "/assets/logo.png" → filename = "assets/logo.png"
-# handles all static asset requests (CSS, JS, images) the UI needs to load
-def serve_static(filename):
-    # serves the requested file directly from the webapp/ folder
-    return send_from_directory(app.static_folder, filename)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /v1/health
-# Simple liveness check — used by SAP AI Core and load balancers to confirm
-# the container is still running and ready to accept requests.
-# Returns immediately with no business logic — just a heartbeat.
-# If this returns anything other than 200, the platform may restart the container.
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/health')
-def health():
-    # jsonify() converts the Python dict → JSON string
-    # Flask automatically sets Content-Type: application/json in the response
-    return jsonify({"status": "healthyUI"})
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /v1/getMetadata?market=Hong+Kong
-#
-# Purpose  : First route the UI calls when user selects a market.
-#            Returns everything the UI needs to know about this market's model.
-#            The UI uses process_types from this response for all subsequent
-#            filtering — it never asks the user to type process_types manually.
-#
-# Reads    : model_config_{market}.json from /mnt/models/ on disk.
-#            This file was saved by trainer.py during training and copied into
-#            the container by SAP AI Core from S3 at deployment time.
-#
-# Sends    : market as a URL query parameter e.g. ?market=Hong Kong
-#            URL params are used here because the UI is only requesting data —
-#            nothing is being sent to the server, so GET is correct.
-#
-# Returns  : {
-#               status: "success",
-#               data: {
-#                   text_column    : "TEXT(S4Journal)",
-#                   target_column  : "taxcategory",
-#                   key_cols       : ["ExpenseType"],
-#                   process_types  : ["TRAVEL", "MEALS"],
-#                   seasonal_words : "mbfc,cbp,rcls",
-#                   allowed_class  : ["Deductible", "Non-deductible"],
-#                   models         : { "TRAVEL": { model_file, metrics, ... } }
-#               }
-#            }
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/getMetadata', methods=['GET'])
-def get_metadata():
-    try:
-        # request.args → dict of URL query parameters (everything after ? in URL)
-        # .get('market') → safely returns None if ?market= is missing from URL
-        # e.g. GET /v1/getMetadata?market=Hong Kong → request.args = {"market": "Hong Kong"}
-        market = request.args.get('market')
-
-        # market is required — without it we don't know which config file to load
-        # 400 = Bad Request — the client sent an incomplete request
-        if not market:
-            return jsonify({
-                "status":  "error",
-                "message": "'market' param is required — e.g. ?market=Hong Kong"
-            }), 400
-
-        # load_metadata() reads model_config_{market}.json from /mnt/models/
-        # e.g. market="Hong Kong" → reads model_config_Hong_Kong.json
-        # returns a Python dict — NOT JSON yet at this point
-        # it only becomes JSON when jsonify() is called below
-        metadata = load_metadata(market)
-
-        # jsonify() converts the Python dict → JSON HTTP response
-        # 200 OK is the default status code so no need to specify it
-        return jsonify({"status": "success", "data": metadata})
-
-    except FileNotFoundError as e:
-        # raised by load_metadata() when model_config_{market}.json
-        # does not exist in /mnt/models/ — this means either:
-        # 1. training never ran for this market
-        # 2. the artifact was not registered correctly in SAP AI Core
-        # 3. SAP AI Core did not copy it from S3 at deployment time
-        # 404 = resource not found — correct HTTP status for a missing file
-        return jsonify({"status": "error", "message": str(e)}), 404
-
-    except Exception as e:
-        # catches any other unexpected error (file read error, JSON parse error etc.)
-        # str(e) converts the Python exception object → readable error message string
-        # 500 = internal server error
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /v1/process
-#
-# Purpose  : Main prediction pipeline trigger — the only data route in this app.
-#            UI sends all data and app.py passes it directly to pipeline.py.
-#            app.py does NO filtering, NO conversion, NO data manipulation.
-#            pipeline.py is responsible for all data filtering and ML logic.
-#
-# Why POST : The UI is sending data (journal lines, mapping, config) to the
-#            server — POST is correct when data is sent in the request body.
-#            GET cannot carry a JSON body reliably.
-#
-# Sends    : {
-#               "market": "Hong Kong",          ← REQUIRED: string
-#
-#               "journal_lines": [              ← REQUIRED: raw transaction rows
-#                   {                             one dict per journal line row
-#                       "MTDPeriod":           "2024-01",
-#                       "DocumentNumber":      "1000001",
-#                       "GLAccount":           "12345",
-#                       "GLTBSource":          "PREV",
-#                       "TEXT(S4Journal)":     "grab taxi to airport",
-#                       "OperatingLocation":   "OL00784",
-#                       "ProfitCenter":        "1234",
-#                       "Segment":             "SEG001",
-#                       "Amount(Base)":        "500.00",
-#                       "Amount(Transaction)": "500.00",
-#                       "TransactionCurrency": "HKD",
-#                       "PostingDate":         "2024-01-15",
-#                       "Ledger":              "0L",
-#                       "CostCenter":          "CC001",
-#                       "PartnerEntity":       "PE001",
-#                       "PostingItem":         "1",
-#                       "Entity/BU":           "HK01",
-#                       "SourceDocumentNo":    "SD001"
-#                   },
-#                   ...
-#               ],
-#
-#               "account_mapping": [            ← REQUIRED: full mapping table
-#                   {                             all markets, all process types
-#                       "Account":     "12345",   pipeline.py filters this
-#                       "ExpenseType": "TRAVEL",  by market + process_types
-#                       "ProcessType": "TRAVEL",
-#                       "Market":      "Hong Kong"
-#                   },
-#                   ...
-#               ],
-#
-#               "config": [                     ← REQUIRED: full config table
-#                   {                             all markets, all process types
-#                       "Market":      "Hong Kong",  pipeline.py filters this
-#                       "ProcessType": "TRAVEL",     by market + process_types
-#                       "Parameter":   "THRESHOLD_AMOUNT",
-#                       "Value":       "30000"
-#                   },
-#                   ...
-#               ]
-#            }
-#
-# Returns  : {
-#               status                 : "success",
-#               message                : "Prediction pipeline completed.",
-#               rows_processed         : 250,
-#               execution_time_seconds : 3.42,
-#               data: [
-#                   {
-#                       "MTDPeriod":              "2024-01",
-#                       "DocumentNumber":         "1000001",
-#                       "GLAccount":              "12345",
-#                       "Prediction ":            "Deductible",
-#                       "Confidence":             0.91,
-#                       "InflunceParameter":      "taxi, airport",
-#                       "ClassProbabilities":     "Deductible:0.91 | Non-deductible:0.09",
-#                       "NetOff":                 "No",
-#                       "ThresholdAmountReached": "No",
-#                       "OperUnitSplit":          "Group",
-#                       ... (all other columns)
-#                   },
-#                   ...
-#               ]
-#            }
-# ─────────────────────────────────────────────────────────────────────────────
-
-@app.route('/v1/process', methods=['POST'])
-def process():
-    try:
-        # request.get_json(silent=True) → parses JSON request body → Python dict
-        # silent=True means if the body is missing or invalid JSON,
-        # it returns None instead of raising an exception
-        # we then handle the None case ourselves with a 400 error below
-        payload = request.get_json(silent=True)
-
-        # if payload is None → body was missing or not valid JSON
-        # 400 = Bad Request — client sent an incomplete or broken request
-        if not payload:
-            return jsonify({
-                "status":  "error",
-                "message": "Missing or invalid JSON body"
-            }), 400
-
-        # ── Step 1: Validate market is present ───────────────────────────────
-        # market is the only field app.py checks — everything else is
-        # validated and processed inside pipeline.py
-        # without market we cannot even start — it determines which model loads
-        market = payload.get('market')
-        if not market:
-            return jsonify({
-                "status":  "error",
-                "message": "'market' is required e.g. 'Hong Kong'"
-            }), 400
-
-        # ── Step 2: Validate all required data keys are present ───────────────
-        # app.py only checks the keys EXIST — it does NOT look inside the data
-        # pipeline.py is responsible for filtering, converting, and using the data
-        #
-        # journal_lines   → raw transaction rows (was HDI JRNLINEITM table)
-        # account_mapping → full GL account mapping table (all markets/process types)
-        #                   pipeline.py will filter by market + process_types
-        # config          → full config parameter table (all markets/process types)
-        #                   pipeline.py will filter by market + process_types
-        #                   and convert to flat config_params dict
-        if not payload.get('journal_lines'):
-            return jsonify({
-                "status":  "error",
-                "message": "'journal_lines' is required — list of journal transaction rows"
-            }), 400
-
-        if not payload.get('account_mapping'):
-            return jsonify({
-                "status":  "error",
-                "message": "'account_mapping' is required — list of GL account mapping rows"
-            }), 400
-
-        if not payload.get('config'):
-            return jsonify({
-                "status":  "error",
-                "message": "'config' is required — list of config parameter rows"
-            }), 400
-
-        # ── Step 3: Log what was received for debugging ───────────────────────
-        # these print statements appear in the SAP AI Core container logs
-        # useful for confirming the right data arrived before pipeline runs
-        print(f"📋 market          : {market}")
-        print(f"📋 journal_lines   : {len(payload.get('journal_lines', []))} rows")
-        print(f"📋 account_mapping : {len(payload.get('account_mapping', []))} rows")
-        print(f"📋 config          : {len(payload.get('config', []))} rows")
-
-        # ── Step 4: Pass raw payload directly to pipeline ─────────────────────
-        # app.py does NOT filter, convert, or manipulate the data in any way
-        # the full raw payload goes straight into process_data()
-        #
-        # Inside process_data() (pipeline.py), the following happens:
-        #   1. load metadata + models from /mnt/models/ based on market
-        #   2. filter account_mapping by market + process_types from metadata
-        #   3. filter config by market + process_types from metadata
-        #   4. convert config rows → flat config_params dict
-        #   5. build predict_df from journal_lines
-        #   6. preprocess text → predict → net-off → threshold → overwrite rules
-        #   7. return results dict
-        result = process_data(payload)
-
-        # jsonify() converts the result Python dict → JSON HTTP response
-        # result already has the right structure from process_data():
-        # { status, message, rows_processed, execution_time_seconds, data }
-        return jsonify(result)
-
-    except Exception as e:
-        # traceback.format_exc() → full Python stack trace as a readable string
-        # this shows the exact file, line number, and error that caused the crash
-        # included in the error response so developers can debug without
-        # needing to look at server logs directly
-        return jsonify({
-            "status":    "error",
-            "message":   str(e),
-            "traceback": traceback.format_exc()
-        }), 500
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# App entry point
-# Only runs when this file is executed directly: python app.py
-# NOT executed when SAP AI Core runs this via gunicorn or uwsgi
-# because those production servers import the app object directly
-# without running the __main__ block
-# ─────────────────────────────────────────────────────────────────────────────
-
-if __name__ == '__main__':
-    # read PORT from environment variable
-    # SAP AI Core injects PORT automatically at container startup
-    # if PORT is not set (e.g. running locally) default to 8080
-    # int() is needed because os.environ returns strings, not integers
-    # and app.run() requires an integer for the port argument
-    port = int(os.environ.get('PORT', 8080))
-
-    # start the Flask development server
-    # host='0.0.0.0' → listen on ALL network interfaces inside the container
-    #                   this is required for Docker — without it Flask only
-    #                   accepts connections from localhost (127.0.0.1) which
-    #                   means requests from outside the container are blocked
-    # port=port       → the port number read from environment above
-    app.run(host='0.0.0.0', port=port)
+📥 Response status : 500
+Traceback (most recent call last):
+  File "/home/user/projects/Prediction_Test copy.py", line 460, in <module>
+    result = call_process(token, MARKET)
+  File "/home/user/projects/Prediction_Test copy.py", line 400, in call_process
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/user/.asdf-inst/installs/python/3.13.1/lib/python3.13/site-packages/requests/models.py", line 1028, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 500 Server Error: Internal Server Error for url: https://api.ai.prod-ap11.ap-southeast-1.aws.ml.hana.ondemand.com/v2/inference/deployments/d008e4949af330f2/v1/process
+user: projects $ ^C
+user: projects $ 
