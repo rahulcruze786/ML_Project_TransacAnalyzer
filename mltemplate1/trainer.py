@@ -72,12 +72,13 @@ def train_models(df, text_column, target_column,allowed_class, df_category_mappi
     
     # ── 2. Creating dataframe by mapping expenseType to training dataset along with Market+ProcessType specific Records only
     df = _map_expense_type_from_category_mapping(df=df,df_category_mapping=df_category_mapping,market=market,process_types=process_types)
-
+    '''
     # Filter out rows where ExpenseType could not be mapped (empty string) : To Highlight this to trainer who is doing training. so that if required the trainer can update the AccontExpense mapping table.
     unmatched = df[df["ExpenseType"].astype(str).str.strip() == ""]
     if not unmatched.empty:
         print(f"Warning: {len(unmatched)} rows had no matching ExpenseType and will be skipped. Unmatched GLAccounts: {unmatched['GLAccount'].unique().tolist()} Need to update the account mapping table")
     unmatched_accounts = unmatched["GLAccount"].unique().tolist() if not unmatched.empty else []
+    '''
     # ── 3. Training Data in which account are matched with Account Expense mapping table will go the training:
     df = df[df["ExpenseType"].astype(str).str.strip() != ""]
 
@@ -180,17 +181,17 @@ def train_models(df, text_column, target_column,allowed_class, df_category_mappi
         safe_market       = str(market).replace("/", "_").replace(" ","_")
         safe_key       = str(key).replace("/", "_").replace("\\", "_")
         model_filename = f"model_{safe_market}_{safe_key}.joblib"
-        model_filename_sg = f"model_Singapore_{safe_key}.joblib" ##################################### TEMP ##########################################################################################
+        #model_filename_sg = f"model_Singapore_{safe_key}.joblib" ##################################### TEMP ##########################################################################################
         model_path     = os.path.join(model_dir, model_filename)
-        model_path_sg     = os.path.join(model_dir, model_filename_sg) ################################TEMP ##########################################################################################
+        #model_path_sg     = os.path.join(model_dir, model_filename_sg) ################################TEMP ##########################################################################################
         joblib.dump(model, model_path)
-        joblib.dump(model, model_path_sg) ############################################################TEMP ###########################################################################################
+        #joblib.dump(model, model_path_sg) ############################################################TEMP ###########################################################################################
         metadata["models"][str(key)] = {
             "model_file": model_filename,
             "metrics":    metrics,
             "train_size": train_size,
             "test_size":  test_size,
-            "model_file_sg":model_filename_sg,
+            #"model_file_sg":model_filename_sg,
         }
         saved_models.append(model_path)
         # store single_class result only if not already overwritten by skipped_vocab
@@ -218,17 +219,18 @@ def train_models(df, text_column, target_column,allowed_class, df_category_mappi
     print(json.dumps(metadata, indent=2))
     print("=====================================\n")
 
+    '''
     # TEMP: duplicate config for Singapore
     sg_metadata = {**metadata, "market": "Singapore"}
     sg_metadata["models"] = {k: {**v, "model_file": v['model_file_sg']} for k, v in metadata["models"].items()}
     with open(os.path.join(model_dir, "model_config_Singapore.json"), "w", encoding="utf-8") as f:
         json.dump(sg_metadata, f, indent=2)
     # END TEMP
-
+    '''
 
 
     message = f"Saved {len(saved_models)} model(s): {saved_models}. Metadata saved to: {config_path}"
-    return message, metadata, key_results, unmatched_accounts, total_train, total_test
+    return message, metadata, key_results, total_train, total_test
 
 
 if __name__ == "__main__":
@@ -255,10 +257,14 @@ if __name__ == "__main__":
     market = "Hong Kong"
     process_types = ["Provisions and Payments of Operating Losses (B/S)","Provisions and Payments of Operating Losses (P/L)"]
 
-    #print(
     train_models(df,text_column=text_column,target_column=target_column,allowed_class = allowed_class,df_category_mapping=df_category_mapping,
             key_cols=key_cols,seasonal_words=seasonal_words,market=market,process_types=process_types)
-    #)
+    
+    allowed_class = ['Deductible','Non-deductible','1 year','3 years']
+    market = "Singapore"
+    process_types = ["Other Operating Expenses"]
+    train_models(df,text_column=text_column,target_column=target_column,allowed_class = allowed_class,df_category_mapping=df_category_mapping,
+            key_cols=key_cols,seasonal_words=seasonal_words,market=market,process_types=process_types)
 
 
 
