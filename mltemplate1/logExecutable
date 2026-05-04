@@ -1,145 +1,48 @@
 @app.route('/v1/process', methods=['POST'])
 def process():
     try:
+        # parse JSON request body → Python dict
+        # silent=True → returns None instead of raising error if body is invalid
         payload = request.get_json(silent=True)
         if not payload:
             return jsonify({"status": "error",
                             "message": "Missing JSON body"}), 400
 
         # ── Step 1: Validate market ───────────────────────────────────────────
+        # market is the only identification the UI sends
+        # all filtering and data processing happens in pipeline.py
         market = payload.get('market')
         if not market:
             return jsonify({"status": "error",
                             "message": "'market' is required"}), 400
 
-        # ── Step 2: Load process_types from metadata ──────────────────────────
-        # process_types ALWAYS comes from metadata — never from the UI
-        # this guarantees process_types always matches what the model was trained with
-        try:
-            metadata = load_metadata(market)
-        except FileNotFoundError as e:
-            return jsonify({"status": "error", "message": str(e)}), 404
-
-        process_types = metadata.get('process_types')
-        if not process_types:
-            return jsonify({"status": "error",
-                            "message": f"'process_types' missing in metadata for market '{market}' — retrain the model!"}), 500
-
-        print(f"📋 market         : {market}")
-        print(f"📋 process_types  : {process_types}")
-
-        # ── Step 3: Validate all required data keys are present ───────────────
+        # ── Step 2: Validate all required data keys are present ───────────────
+        # just check the keys exist — no filtering or conversion here
+        # pipeline.py is responsible for all data filtering and processing
         if not payload.get('journal_lines'):
             return jsonify({"status": "error",
                             "message": "'journal_lines' is required"}), 400
+
         if not payload.get('account_mapping'):
             return jsonify({"status": "error",
                             "message": "'account_mapping' is required"}), 400
+
         if not payload.get('config'):
             return jsonify({"status": "error",
                             "message": "'config' is required"}), 400
 
-        # ── Step 4: Filter account_mapping by market + process_types ─────────
-        # UI sends the FULL account mapping table — all markets, all process types
-        # We must filter here because:
-        #
-        # MARKET filter:
-        #   Without it → Singapore accounts could incorrectly match Hong Kong
-        #   journal lines if GL account numbers happen to be the same
-        #   e.g. Account "99999" exists in both HK and SG with different ExpenseTypes
-        #   → wrong ExpenseType → wrong model predicts for that row
-        #
-        # PROCESS TYPE filter:
-        #   Without it → accounts from unrelated process types (e.g. HOTEL)
-        #   would be included in the pipeline even though the model was
-        #   only trained on TRAVEL and MEALS process types
-        account_mapping_data = payload.get('account_mapping', [])
-        account_df = pd.DataFrame(account_mapping_data)
+        # ── Step 3: Pass raw payload directly to pipeline ────────────────────
+        # app.py does NO filtering, NO conversion, NO data manipulation
+        # process_data() in pipeline.py receives the full raw payload
+        # and handles everything — filtering by market + process_types,
+        # converting config rows → config_params dict, and running prediction
+        result = process_data(payload)
 
-        # filter by market — keep only rows matching the requested market
-        if 'Market' in account_df.columns:
-            account_df = account_df[account_df['Market'] == market]
-            print(f"📋 account_mapping after market filter        : {len(account_df)} rows")
-
-        # filter by process_types from metadata
-        # .isin() keeps rows where ProcessType matches ANY value in the list
-        # e.g. process_types = ["TRAVEL", "MEALS"] → keeps TRAVEL and MEALS rows only
-        if 'ProcessType' in account_df.columns:
-            account_df = account_df[account_df['ProcessType'].isin(process_types)]
-            print(f"📋 account_mapping after process_type filter  : {len(account_df)} rows")
-
-        # ── Step 5: Filter config and convert → flat config_params dict ───────
-        # UI sends the FULL config table — all markets, all process types
-        # We must filter here because:
-        #
-        # MARKET filter:
-        #   Without it → dict(zip()) could pick up Singapore's THRESHOLD_AMOUNT
-        #   instead of Hong Kong's — wrong value used in pipeline
-        #
-        # PROCESS TYPE filter:
-        #   Without it → if two rows exist for THRESHOLD_AMOUNT (one for TRAVEL,
-        #   one for HOTEL), dict(zip()) keeps whichever comes last in the list
-        #   → unpredictable and wrong config value used in pipeline
-        #
-        # GLOBAL rows (no ProcessType):
-        #   Some config params apply to all process types — no ProcessType column value
-        #   e.g. OW_RL_FM_PROFIT_CENTRE applies globally
-        #   → keep these rows too using .isna() check
-        config_rows = payload.get('config', [])
-        config_df   = pd.DataFrame(config_rows)
-
-        # filter by market
-        if 'Market' in config_df.columns:
-            config_df = config_df[config_df['Market'] == market]
-            print(f"📋 config after market filter        : {len(config_df)} rows")
-
-        # filter by process_types — keep matching rows AND global rows (no ProcessType)
-        if 'ProcessType' in config_df.columns:
-            config_df = config_df[
-                config_df['ProcessType'].isin(process_types) |  # matches process_types
-                config_df['ProcessType'].isna()                  # OR global rows (no ProcessType)
-            ]
-            print(f"📋 config after process_type filter  : {len(config_df)} rows")
-
-        # validate Parameter and Value columns exist before converting
-        if 'Parameter' not in config_df.columns or 'Value' not in config_df.columns:
-            return jsonify({"status": "error",
-                            "message": "config rows must have 'Parameter' and 'Value' columns"}), 400
-
-        # zip() pairs Parameter and Value columns together row by row
-        # dict() converts those pairs → flat key-value dict
-        # e.g. Parameter=["THRESHOLD_AMOUNT"], Value=["30000"]
-        #   → { "THRESHOLD_AMOUNT": "30000" }
-        # now guaranteed to have only Hong Kong + correct process_type values
-        config_params = dict(zip(config_df['Parameter'], config_df['Value']))
-        print(f"📋 config_params built : {list(config_params.keys())}")
-
-        # ── Step 6: Build internal payload for process_data() ─────────────────
-        # process_data() in pipeline.py expects this exact structure
-        # account_mapping is now passed as filtered list of dicts (not full table)
-        # config_params is now a clean flat dict with only relevant values
-        internal_payload = {
-            "market":          market,
-            "journal_lines":   payload.get('journal_lines'),
-
-            # filtered account mapping — only market + process_types rows
-            "account_mapping": account_df.to_dict(orient='records'),
-
-            # filtered flat config dict — only market + process_types values
-            "config_params":   config_params
-        }
-
-        print(f"📋 journal_lines   : {len(internal_payload['journal_lines'])} rows")
-        print(f"📋 account_mapping : {len(internal_payload['account_mapping'])} rows")
-
-        # ── Step 7: Call pipeline and return result ───────────────────────────
-        # process_data() runs the full ML pipeline and returns:
-        # { status, message, rows_processed, execution_time_seconds, data }
-        result = process_data(internal_payload)
-
+        # jsonify() converts result dict → JSON HTTP response
         return jsonify(result)
 
     except Exception as e:
+        # traceback.format_exc() → full stack trace as a readable string
         return jsonify({
             "status":    "error",
             "message":   str(e),
