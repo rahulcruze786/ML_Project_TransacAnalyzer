@@ -23,7 +23,7 @@ spec:
         labels:
           ai.sap.com/resourcePlan: starter
       container:
-        image: docker.io/rahulcruze786/ml_training_model:v1.14
+        image: docker.io/rahulcruze786/ml_training_model:v1.13
         command: ["python"]
         args:
           - "metrics.py"
