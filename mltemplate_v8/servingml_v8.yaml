@@ -25,7 +25,7 @@ spec:
         maxReplicas: 2
         containers:
           - name: kserve-container
-            image: docker.io/rahulcruze786/ml_prediction:v1.15
+            image: docker.io/rahulcruze786/ml_prediction:v1.14
             ports:
               - containerPort: 8080
                 protocol: TCP
