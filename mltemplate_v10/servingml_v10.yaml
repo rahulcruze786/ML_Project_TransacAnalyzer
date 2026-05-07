@@ -2,14 +2,14 @@
 apiVersion: ai.sap.com/v1alpha1
 kind: ServingTemplate
 metadata:
-  name: naive-bayes-prediction-v8
+  name: naive-bayes-prediction-v10
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v8"
-    scenarios.ai.sap.com/name: "naive-bayes-v8"
-    executables.ai.sap.com/description: "naive-bayes prediction-v8"
-    executables.ai.sap.com/name: "naive-bayes-prediction-v8"
+    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v10"
+    scenarios.ai.sap.com/name: "naive-bayes-v10"
+    executables.ai.sap.com/description: "naive-bayes prediction-v10"
+    executables.ai.sap.com/name: "naive-bayes-prediction-v10"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes-v8"
+    scenarios.ai.sap.com/id: "naive-bayes-v10"
     ai.sap.com/version: "1.0.0"
 spec:
   inputs:
@@ -26,7 +26,7 @@ spec:
         maxReplicas: 2
         containers:
           - name: kserve-container
-            image: docker.io/rahulcruze786/ml_prediction:v1.14
+            image: docker.io/rahulcruze786/ml_prediction:v1.15
             ports:
               - containerPort: 8080
                 protocol: TCP
