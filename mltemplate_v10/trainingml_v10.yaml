@@ -2,14 +2,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: naive-bayes-training-v8
+  name: naive-bayes-training-v10
   annotations:
-    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-v8"
-    scenarios.ai.sap.com/name: "naive-bayes-v8"
-    executables.ai.sap.com/description: "naive-bayes model-v8"
-    executables.ai.sap.com/name: "naive-bayes-training-v8"
+    scenarios.ai.sap.com/description: "naive-bayes training Pipeline-v10"
+    scenarios.ai.sap.com/name: "naive-bayes-v10"
+    executables.ai.sap.com/description: "naive-bayes model-v10"
+    executables.ai.sap.com/name: "naive-bayes-training-v10"
   labels:
-    scenarios.ai.sap.com/id: "naive-bayes-v8"
+    scenarios.ai.sap.com/id: "naive-bayes-v10"
     ai.sap.com/version: "1.0.0"
 spec:
   entrypoint: training-pipeline
@@ -24,7 +24,7 @@ spec:
         labels:
           ai.sap.com/resourcePlan: starter
       container:
-        image: docker.io/rahulcruze786/ml_training_model:v1.14
+        image: docker.io/rahulcruze786/ml_training_model:v1.15
         command: ["python"]
         args:
           - "metrics.py"
