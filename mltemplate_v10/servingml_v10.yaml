@@ -1,1 +1,47 @@
 
+apiVersion: ai.sap.com/v1alpha1
+kind: ServingTemplate
+metadata:
+  name: naive-bayes-prediction-v8
+  annotations:
+    scenarios.ai.sap.com/description: "naive-bayes serving Pipeline-v8"
+    scenarios.ai.sap.com/name: "naive-bayes-v8"
+    executables.ai.sap.com/description: "naive-bayes prediction-v8"
+    executables.ai.sap.com/name: "naive-bayes-prediction-v8"
+  labels:
+    scenarios.ai.sap.com/id: "naive-bayes-v8"
+    ai.sap.com/version: "1.0.0"
+spec:
+  inputs:
+    artifacts:
+      - name: ALL_MARKET_NB_MODEL_HK_SG
+  template:
+    apiVersion: "serving.kserve.io/v1beta1"
+    metadata:
+      annotations: "{}"
+      labels: "{\"ai.sap.com/resourcePlan\": \"starter\"}"
+    spec: |
+      predictor:
+        minReplicas: 1
+        maxReplicas: 2
+        containers:
+          - name: kserve-container
+            image: docker.io/rahulcruze786/ml_prediction:v1.14
+            ports:
+              - containerPort: 8080
+                protocol: TCP
+            command: ["python","app.py"]
+            #args:
+              #- "prediction/app.py"
+            env:
+              - name: STORAGE_URI
+                value: "{{inputs.artifacts.ALL_MARKET_NB_MODEL_HK_SG}}"
+              - name: MODEL_PATH
+                value: "/mnt/models"
+            resources:
+              requests:
+                cpu: "0.5"
+                memory: "512Mi"
+              limits:
+                cpu: "1"
+                memory: "1Gi"
